@@ -1,0 +1,203 @@
+<routes>
+  <vType id="car" accel="1.0" decel="4.5" maxSpeed="25" length="5"/>
+  <route id="r0" edges="-east south"/>
+  <vehicle id="veh0" type="car" route="r0" depart="0.0"/>
+  <route id="r1" edges="-north west"/>
+  <vehicle id="veh1" type="car" route="r1" depart="1.0"/>
+  <route id="r2" edges="-north west"/>
+  <vehicle id="veh2" type="car" route="r2" depart="2.0"/>
+  <route id="r3" edges="-east south"/>
+  <vehicle id="veh3" type="car" route="r3" depart="3.0"/>
+  <route id="r4" edges="-west north"/>
+  <vehicle id="veh4" type="car" route="r4" depart="4.0"/>
+  <route id="r5" edges="-east south"/>
+  <vehicle id="veh5" type="car" route="r5" depart="5.0"/>
+  <route id="r6" edges="-north west"/>
+  <vehicle id="veh6" type="car" route="r6" depart="6.0"/>
+  <route id="r7" edges="-east west"/>
+  <vehicle id="veh7" type="car" route="r7" depart="7.0"/>
+  <route id="r8" edges="-west east"/>
+  <vehicle id="veh8" type="car" route="r8" depart="8.0"/>
+  <route id="r9" edges="-north south"/>
+  <vehicle id="veh9" type="car" route="r9" depart="9.0"/>
+  <route id="r10" edges="-south north"/>
+  <vehicle id="veh10" type="car" route="r10" depart="10.0"/>
+  <route id="r11" edges="-north east"/>
+  <vehicle id="veh11" type="car" route="r11" depart="11.0"/>
+  <route id="r12" edges="-west south"/>
+  <vehicle id="veh12" type="car" route="r12" depart="12.0"/>
+  <route id="r13" edges="-west east"/>
+  <vehicle id="veh13" type="car" route="r13" depart="13.0"/>
+  <route id="r14" edges="-south east"/>
+  <vehicle id="veh14" type="car" route="r14" depart="14.0"/>
+  <route id="r15" edges="-west south"/>
+  <vehicle id="veh15" type="car" route="r15" depart="15.0"/>
+  <route id="r16" edges="-south west"/>
+  <vehicle id="veh16" type="car" route="r16" depart="16.0"/>
+  <route id="r17" edges="-south west"/>
+  <vehicle id="veh17" type="car" route="r17" depart="17.0"/>
+  <route id="r18" edges="-south east"/>
+  <vehicle id="veh18" type="car" route="r18" depart="18.0"/>
+  <route id="r19" edges="-south north"/>
+  <vehicle id="veh19" type="car" route="r19" depart="19.0"/>
+  <route id="r20" edges="-north south"/>
+  <vehicle id="veh20" type="car" route="r20" depart="20.0"/>
+  <route id="r21" edges="-west south"/>
+  <vehicle id="veh21" type="car" route="r21" depart="21.0"/>
+  <route id="r22" edges="-west east"/>
+  <vehicle id="veh22" type="car" route="r22" depart="22.0"/>
+  <route id="r23" edges="-south east"/>
+  <vehicle id="veh23" type="car" route="r23" depart="23.0"/>
+  <route id="r24" edges="-east north"/>
+  <vehicle id="veh24" type="car" route="r24" depart="24.0"/>
+  <route id="r25" edges="-west east"/>
+  <vehicle id="veh25" type="car" route="r25" depart="25.0"/>
+  <route id="r26" edges="-south west"/>
+  <vehicle id="veh26" type="car" route="r26" depart="26.0"/>
+  <route id="r27" edges="-south east"/>
+  <vehicle id="veh27" type="car" route="r27" depart="27.0"/>
+  <route id="r28" edges="-east south"/>
+  <vehicle id="veh28" type="car" route="r28" depart="28.0"/>
+  <route id="r29" edges="-south north"/>
+  <vehicle id="veh29" type="car" route="r29" depart="29.0"/>
+  <route id="r30" edges="-east west"/>
+  <vehicle id="veh30" type="car" route="r30" depart="30.0"/>
+  <route id="r31" edges="-north west"/>
+  <vehicle id="veh31" type="car" route="r31" depart="31.0"/>
+  <route id="r32" edges="-west east"/>
+  <vehicle id="veh32" type="car" route="r32" depart="32.0"/>
+  <route id="r33" edges="-west east"/>
+  <vehicle id="veh33" type="car" route="r33" depart="33.0"/>
+  <route id="r34" edges="-south east"/>
+  <vehicle id="veh34" type="car" route="r34" depart="34.0"/>
+  <route id="r35" edges="-west north"/>
+  <vehicle id="veh35" type="car" route="r35" depart="35.0"/>
+  <route id="r36" edges="-west south"/>
+  <vehicle id="veh36" type="car" route="r36" depart="36.0"/>
+  <route id="r37" edges="-north west"/>
+  <vehicle id="veh37" type="car" route="r37" depart="37.0"/>
+  <route id="r38" edges="-north south"/>
+  <vehicle id="veh38" type="car" route="r38" depart="38.0"/>
+  <route id="r39" edges="-north east"/>
+  <vehicle id="veh39" type="car" route="r39" depart="39.0"/>
+  <route id="r40" edges="-north south"/>
+  <vehicle id="veh40" type="car" route="r40" depart="40.0"/>
+  <route id="r41" edges="-north west"/>
+  <vehicle id="veh41" type="car" route="r41" depart="41.0"/>
+  <route id="r42" edges="-north west"/>
+  <vehicle id="veh42" type="car" route="r42" depart="42.0"/>
+  <route id="r43" edges="-west north"/>
+  <vehicle id="veh43" type="car" route="r43" depart="43.0"/>
+  <route id="r44" edges="-south north"/>
+  <vehicle id="veh44" type="car" route="r44" depart="44.0"/>
+  <route id="r45" edges="-west east"/>
+  <vehicle id="veh45" type="car" route="r45" depart="45.0"/>
+  <route id="r46" edges="-west east"/>
+  <vehicle id="veh46" type="car" route="r46" depart="46.0"/>
+  <route id="r47" edges="-east south"/>
+  <vehicle id="veh47" type="car" route="r47" depart="47.0"/>
+  <route id="r48" edges="-east west"/>
+  <vehicle id="veh48" type="car" route="r48" depart="48.0"/>
+  <route id="r49" edges="-south north"/>
+  <vehicle id="veh49" type="car" route="r49" depart="49.0"/>
+  <route id="r50" edges="-west north"/>
+  <vehicle id="veh50" type="car" route="r50" depart="50.0"/>
+  <route id="r51" edges="-south west"/>
+  <vehicle id="veh51" type="car" route="r51" depart="51.0"/>
+  <route id="r52" edges="-south north"/>
+  <vehicle id="veh52" type="car" route="r52" depart="52.0"/>
+  <route id="r53" edges="-east west"/>
+  <vehicle id="veh53" type="car" route="r53" depart="53.0"/>
+  <route id="r54" edges="-south west"/>
+  <vehicle id="veh54" type="car" route="r54" depart="54.0"/>
+  <route id="r55" edges="-east south"/>
+  <vehicle id="veh55" type="car" route="r55" depart="55.0"/>
+  <route id="r56" edges="-east south"/>
+  <vehicle id="veh56" type="car" route="r56" depart="56.0"/>
+  <route id="r57" edges="-west east"/>
+  <vehicle id="veh57" type="car" route="r57" depart="57.0"/>
+  <route id="r58" edges="-east north"/>
+  <vehicle id="veh58" type="car" route="r58" depart="58.0"/>
+  <route id="r59" edges="-north west"/>
+  <vehicle id="veh59" type="car" route="r59" depart="59.0"/>
+  <route id="r60" edges="-south east"/>
+  <vehicle id="veh60" type="car" route="r60" depart="60.0"/>
+  <route id="r61" edges="-south north"/>
+  <vehicle id="veh61" type="car" route="r61" depart="61.0"/>
+  <route id="r62" edges="-west south"/>
+  <vehicle id="veh62" type="car" route="r62" depart="62.0"/>
+  <route id="r63" edges="-south west"/>
+  <vehicle id="veh63" type="car" route="r63" depart="63.0"/>
+  <route id="r64" edges="-south west"/>
+  <vehicle id="veh64" type="car" route="r64" depart="64.0"/>
+  <route id="r65" edges="-west north"/>
+  <vehicle id="veh65" type="car" route="r65" depart="65.0"/>
+  <route id="r66" edges="-east north"/>
+  <vehicle id="veh66" type="car" route="r66" depart="66.0"/>
+  <route id="r67" edges="-east north"/>
+  <vehicle id="veh67" type="car" route="r67" depart="67.0"/>
+  <route id="r68" edges="-south east"/>
+  <vehicle id="veh68" type="car" route="r68" depart="68.0"/>
+  <route id="r69" edges="-east north"/>
+  <vehicle id="veh69" type="car" route="r69" depart="69.0"/>
+  <route id="r70" edges="-east north"/>
+  <vehicle id="veh70" type="car" route="r70" depart="70.0"/>
+  <route id="r71" edges="-north west"/>
+  <vehicle id="veh71" type="car" route="r71" depart="71.0"/>
+  <route id="r72" edges="-west east"/>
+  <vehicle id="veh72" type="car" route="r72" depart="72.0"/>
+  <route id="r73" edges="-west east"/>
+  <vehicle id="veh73" type="car" route="r73" depart="73.0"/>
+  <route id="r74" edges="-east west"/>
+  <vehicle id="veh74" type="car" route="r74" depart="74.0"/>
+  <route id="r75" edges="-south north"/>
+  <vehicle id="veh75" type="car" route="r75" depart="75.0"/>
+  <route id="r76" edges="-west east"/>
+  <vehicle id="veh76" type="car" route="r76" depart="76.0"/>
+  <route id="r77" edges="-north west"/>
+  <vehicle id="veh77" type="car" route="r77" depart="77.0"/>
+  <route id="r78" edges="-south west"/>
+  <vehicle id="veh78" type="car" route="r78" depart="78.0"/>
+  <route id="r79" edges="-north south"/>
+  <vehicle id="veh79" type="car" route="r79" depart="79.0"/>
+  <route id="r80" edges="-south west"/>
+  <vehicle id="veh80" type="car" route="r80" depart="80.0"/>
+  <route id="r81" edges="-south north"/>
+  <vehicle id="veh81" type="car" route="r81" depart="81.0"/>
+  <route id="r82" edges="-north west"/>
+  <vehicle id="veh82" type="car" route="r82" depart="82.0"/>
+  <route id="r83" edges="-west north"/>
+  <vehicle id="veh83" type="car" route="r83" depart="83.0"/>
+  <route id="r84" edges="-west south"/>
+  <vehicle id="veh84" type="car" route="r84" depart="84.0"/>
+  <route id="r85" edges="-south east"/>
+  <vehicle id="veh85" type="car" route="r85" depart="85.0"/>
+  <route id="r86" edges="-west east"/>
+  <vehicle id="veh86" type="car" route="r86" depart="86.0"/>
+  <route id="r87" edges="-east north"/>
+  <vehicle id="veh87" type="car" route="r87" depart="87.0"/>
+  <route id="r88" edges="-east north"/>
+  <vehicle id="veh88" type="car" route="r88" depart="88.0"/>
+  <route id="r89" edges="-south north"/>
+  <vehicle id="veh89" type="car" route="r89" depart="89.0"/>
+  <route id="r90" edges="-west south"/>
+  <vehicle id="veh90" type="car" route="r90" depart="90.0"/>
+  <route id="r91" edges="-north south"/>
+  <vehicle id="veh91" type="car" route="r91" depart="91.0"/>
+  <route id="r92" edges="-west east"/>
+  <vehicle id="veh92" type="car" route="r92" depart="92.0"/>
+  <route id="r93" edges="-north east"/>
+  <vehicle id="veh93" type="car" route="r93" depart="93.0"/>
+  <route id="r94" edges="-south east"/>
+  <vehicle id="veh94" type="car" route="r94" depart="94.0"/>
+  <route id="r95" edges="-north east"/>
+  <vehicle id="veh95" type="car" route="r95" depart="95.0"/>
+  <route id="r96" edges="-east south"/>
+  <vehicle id="veh96" type="car" route="r96" depart="96.0"/>
+  <route id="r97" edges="-south west"/>
+  <vehicle id="veh97" type="car" route="r97" depart="97.0"/>
+  <route id="r98" edges="-west north"/>
+  <vehicle id="veh98" type="car" route="r98" depart="98.0"/>
+  <route id="r99" edges="-north east"/>
+  <vehicle id="veh99" type="car" route="r99" depart="99.0"/>
+</routes>
