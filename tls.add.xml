@@ -4,6 +4,7 @@
         <phase duration="30" state="rrrGGGrrrrGGGr"/>
         <!-- Phase 2: East-West Left -->
         <phase duration="20" state="rrrrrrGrrrrrrG"/>
+        
         <!-- Phase 3: East-West Right
         <phase duration="15" state="rrrGrrrrrrGrrr"/> -->
 
