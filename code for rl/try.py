@@ -6,8 +6,8 @@ import tensorflow as tf
 from collections import deque
 
 # ----------- Hyperparameters -----------
-STATE_SIZE = 6  # number of lanes or features
-ACTION_SIZE = 4  # number of traffic light phases
+STATE_SIZE = 6
+ACTION_SIZE = 14  # number of traffic light signals
 GAMMA = 0.95
 ALPHA = 0.001
 EPSILON = 1.0
@@ -17,6 +17,17 @@ BATCH_SIZE = 32
 MEMORY_SIZE = 2000
 EPISODES = 100
 
+# ----------- SUMO Setup -----------
+SUMO_BINARY = "sumo"  # or "sumo-gui"
+SUMO_CONFIG = "../trafficinter.sumocfg"
+TLS_ID = "J0"
+CONTROLLED_LANES = [
+    '-north_0', '-north_0', '-north_1',
+    '-east_0', '-east_0', '-east_1', '-east_2',
+    '-south_0', '-south_0', '-south_1',
+    '-west_0', '-west_0', '-west_1', '-west_2'
+]
+
 # ----------- DQN Agent -----------
 class DQNAgent:
     def __init__(self):
@@ -25,9 +36,9 @@ class DQNAgent:
 
     def _build_model(self):
         model = tf.keras.Sequential([
-            tf.keras.layers.Dense(24, input_dim=STATE_SIZE, activation='relu'),
-            tf.keras.layers.Dense(24, activation='relu'),
-            tf.keras.layers.Dense(ACTION_SIZE, activation='linear')
+            tf.keras.layers.Dense(32, input_dim=STATE_SIZE, activation='relu'),
+            tf.keras.layers.Dense(32, activation='relu'),
+            tf.keras.layers.Dense(ACTION_SIZE, activation='sigmoid')  # for G/y/r
         ])
         model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(learning_rate=ALPHA))
         return model
@@ -37,9 +48,9 @@ class DQNAgent:
 
     def act(self, state, epsilon):
         if np.random.rand() <= epsilon:
-            return random.randrange(ACTION_SIZE)
-        q_values = self.model.predict(np.array([state]), verbose=0)
-        return np.argmax(q_values[0])
+            return np.random.rand(ACTION_SIZE)  # continuous random values [0, 1]
+        q_values = self.model.predict(np.array([state]), verbose=0)[0]
+        return q_values
 
     def replay(self):
         if len(self.memory) < BATCH_SIZE:
@@ -48,59 +59,73 @@ class DQNAgent:
         for s, a, r, s_, done in minibatch:
             target = r
             if not done:
-                target += GAMMA * np.amax(self.model.predict(np.array([s_]), verbose=0)[0])
-            q_values = self.model.predict(np.array([s]), verbose=0)
-            q_values[0][a] = target
-            self.model.fit(np.array([s]), q_values, epochs=1, verbose=0)
+                future = self.model.predict(np.array([s_]), verbose=0)[0]
+                target += GAMMA * np.max(future)
+            target_vector = self.model.predict(np.array([s]), verbose=0)[0]
+            # Just update the full vector toward target in the best direction
+            target_vector = a  # learning to replicate the action directly
+            self.model.fit(np.array([s]), np.array([target_vector]), epochs=1, verbose=0)
 
-# ----------- SUMO Setup -----------
-SUMO_BINARY = "sumo-gui"  # or "sumo-gui"
-SUMO_CONFIG = "../trafficinter.sumocfg"
-TLS_ID = "J0"
-PHASES = [0, 1, 2, 3]  # assume 4 phases for example
-LANES = ["east_0", "west_0", "north_0", "south_0", "east_1", "west_1"]
-
+# ----------- Helper Functions -----------
 def get_state():
     state = []
-    for lane in LANES:
-        queue_len = traci.lane.getLastStepHaltingNumber(lane)
-        state.append(queue_len)
+    for lane in ["-east_0", "-west_0", "-north_0", "-south_0", "-east_1", "-west_1"]:
+        q = traci.lane.getLastStepHaltingNumber(lane)
+        state.append(q)
     return np.array(state, dtype=np.float32)
 
 def compute_reward():
     total_wait = 0
-    for lane in LANES:
+    for lane in CONTROLLED_LANES:
         vehs = traci.lane.getLastStepVehicleIDs(lane)
         for v in vehs:
             total_wait += traci.vehicle.getWaitingTime(v)
     return -total_wait  # lower wait = better
 
-# ----------- Main Loop -----------
+def action_to_tls_string(action_vector):
+    state_str = ""
+    for val in action_vector:
+        if val > 0.66:
+            state_str += 'G'
+        elif val > 0.33:
+            state_str += 'y'
+        else:
+            state_str += 'r'
+    return state_str
+
+# ----------- Training Loop -----------
 agent = DQNAgent()
 
 for episode in range(EPISODES):
+    if episode % 10 == 0:
+        SUMO_BINARY="sumo-gui"
+    else:
+        SUMO_BINARY="sumo"
     traci.start([SUMO_BINARY, "-c", SUMO_CONFIG])
     step = 0
     total_reward = 0
     done = False
     state = get_state()
-    
-    while step < 500:
-        action = agent.act(state, EPSILON)
-        traci.trafficlight.setPhase(TLS_ID, PHASES[action])
+
+    while traci.simulation.getMinExpectedNumber() > 0 and step < 1000:
+        action_vector = agent.act(state, EPSILON)
+        tls_state = action_to_tls_string(action_vector)
+        traci.trafficlight.setRedYellowGreenState(TLS_ID, tls_state)
         traci.simulationStep()
-        
+
         next_state = get_state()
         reward = compute_reward()
         total_reward += reward
-        done = step >= 499
-        agent.remember(state, action, reward, next_state, done)
+        done = traci.simulation.getMinExpectedNumber() == 0
+
+        agent.remember(state, action_vector, reward, next_state, done)
         state = next_state
         step += 1
-    
+
     traci.close()
-    print(f"Episode {episode+1}/{EPISODES}, Reward: {total_reward}")
-    
+    print(f"Episode {episode+1}/{EPISODES}, Reward: {total_reward:.2f}, Steps: {step}")
+
     agent.replay()
+
     if EPSILON > MIN_EPSILON:
         EPSILON *= EPSILON_DECAY
