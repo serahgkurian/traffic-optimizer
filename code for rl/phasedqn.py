@@ -5,7 +5,7 @@ import random
 import tensorflow as tf
 
 # Hyperparameters
-STATE_SIZE = 6 + 4 + 1  # 6 lane queues + 4 phases (example) + elapsed time
+STATE_SIZE = 14 + 4 + 1  # 14 controlled lanes, 4 one-hot phases, 1 time
 ACTION_SIZE = 4         # number of phases, example 4 phases
 GAMMA = 0.95
 ALPHA = 0.001
@@ -22,6 +22,8 @@ CONTROLLED_LANES = ['-north_0', '-north_0', '-north_1',
     '-south_0', '-south_0', '-south_1',
     '-west_0', '-west_0', '-west_1', '-west_2']
 TLS_ID = "J0"
+
+STATE_SIZE = len(CONTROLLED_LANES) + ACTION_SIZE + 1  # 14 + 4 + 1 = 19
 
 class DQNAgent:
     def __init__(self):
