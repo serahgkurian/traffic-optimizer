@@ -89,7 +89,7 @@ def compute_reward():
 agent = DQNAgent()
 
 for episode in range(EPISODES):
-    traci.start(["sumo-gui", "-c", "../trafficinter.sumocfg"])
+    traci.start(["sumo", "-c", "../trafficinter.sumocfg"])
     step = 0
     done = False
     total_reward = 0
