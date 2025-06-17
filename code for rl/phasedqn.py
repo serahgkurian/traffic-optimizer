@@ -89,11 +89,22 @@ def compute_reward():
 agent = DQNAgent()
 
 for episode in range(EPISODES):
+<<<<<<< Updated upstream
     traci.start(["sumo", "-c", "C:\\github repos\traffic_optimizerDQN\trafficinter.sumocfg"])
+=======
+    route_file = r"random_routes.rou.xml"
+    generate_random_routes(route_file, num_vehicles=VEHICLES_PER_RUN)
+
+    if episode == EPISODES - 1:
+        SUMO_BINARY = "sumo-gui"
+
+    traci.start([SUMO_BINARY, "-c", "C:\\github repos\\traffic_optimizerDQN\\trafficinter.sumocfg"])
+>>>>>>> Stashed changes
     step = 0
     done = False
     total_reward = 0
     last_phase = -1
+
     last_phase_time = 0
 
     state, last_phase, last_phase_time = get_state(TLS_ID, CONTROLLED_LANES, last_phase, last_phase_time, step)
@@ -118,7 +129,12 @@ for episode in range(EPISODES):
     traci.close()
     print(f"Episode {episode + 1}/{EPISODES} Reward: {total_reward:.2f} Steps: {step}")
 
+<<<<<<< Updated upstream
     agent.replay()
+=======
+    if step % 10 == 0:
+        agent.replay()
+>>>>>>> Stashed changes
 
     if EPSILON > MIN_EPSILON:
         EPSILON *= EPSILON_DECAY
