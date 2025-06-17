@@ -10,14 +10,14 @@ from generate_routes import generate_random_routes
 # Hyperparameters
 STATE_SIZE = 14 + 4 + 1
 ACTION_SIZE = 4
-GAMMA = 0.95
-ALPHA = 0.001
+GAMMA = 0.99  # was 0.95
+ALPHA = 0.005  # was 0.001
 EPSILON = 1.0
-EPSILON_DECAY = 0.995
+EPSILON_DECAY = 0.98  # was 0.995
 MIN_EPSILON = 0.1
-BATCH_SIZE = 32
-MEMORY_SIZE = 2000
-EPISODES = 500
+BATCH_SIZE = 128  # was 32
+MEMORY_SIZE = 20000  # was 2000
+EPISODES = 300
 SUMO_BINARY = "sumo"
 VEHICLES_PER_RUN = 300
 MAX_STEPS = 500
