@@ -12,8 +12,8 @@ PHASES = [0, 1, 2, 3]
 STATE_SIZE = 14 + 1  # 14 lanes + current phase
 GAMMA = 0.99
 LEARNING_RATE = 0.001
-EPISODES = 100
-MAX_STEPS = 500
+EPISODES = 200
+MAX_STEPS = 800
 CONTROLLED_LANES = ['-north_0', '-north_0', '-north_1',
                     '-east_0', '-east_0', '-east_1', '-east_2',
                     '-south_0', '-south_0', '-south_1',

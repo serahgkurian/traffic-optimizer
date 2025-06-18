@@ -7,7 +7,7 @@
 
     <input>
         <net-file value="trafficinter.net.xml"/>
-        <route-files value="code%20for%20rl/random_routes.rou.xml"/>
+        <route-files value="code for rl/random_routes.rou.xml"/>
     </input>
 
 </sumoConfiguration>
