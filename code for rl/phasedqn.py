@@ -112,13 +112,13 @@ with open(csv_path, "w", newline='') as f:
 agent = DQNAgent()
 
 for episode in range(EPISODES):
-    route_file = r"../code for rl/random_routes.rou.xml"
+    route_file = r"random_routes.rou.xml"
     generate_random_routes(route_file, num_vehicles=VEHICLES_PER_RUN)
 
     if episode == EPISODES - 1:
         SUMO_BINARY = "sumo-gui"
 
-    traci.start([SUMO_BINARY, "-c", "../trafficinter.sumocfg"])
+    traci.start([SUMO_BINARY, "-c", "C:\\github repos\\traffic_optimizerDQN\\trafficinter.sumocfg"])
     step = 0
     total_reward = 0
     last_phase = -1
