@@ -11,9 +11,9 @@ from generate_routes import generate_random_routes
 STATE_SIZE = 14 + 4 + 1
 ACTION_SIZE = 4
 GAMMA = 0.99  # was 0.95
-ALPHA = 0.005  # was 0.001
+ALPHA = 0.003  # was 0.001
 EPSILON = 1.0
-EPSILON_DECAY = 0.98  # was 0.995
+EPSILON_DECAY = 0.99  # was 0.995
 MIN_EPSILON = 0.1
 BATCH_SIZE = 128  # was 32
 MEMORY_SIZE = 20000  # was 2000
@@ -94,10 +94,10 @@ def compute_reward(prev_stopped, prev_passed, prev_phase, current_phase, current
                 long_wait_vehicles += 1
 
     reward = (
-        + 1.0 * (current_passed - prev_passed)
-        - 0.5 * (current_stopped - prev_stopped)
-        - 2.0 * phase_changed
-        - 1.0 * long_wait_vehicles
+        + 3.0 * (current_passed - prev_passed)
+        - 1.0 * (current_stopped - prev_stopped)
+        - 1.0 * phase_changed
+        - 2.0 * long_wait_vehicles
     )
     return reward, current_stopped
 
