@@ -19,8 +19,8 @@ CONTROLLED_LANES = ['-north_0', '-north_0', '-north_1',
                     '-south_0', '-south_0', '-south_1',
                     '-west_0', '-west_0', '-west_1', '-west_2']
 TLS_ID = "J0"
-VEHICLES_PER_RUN = 300
-SUMO_BINARY = "sumo-gui"
+VEHICLES_PER_RUN = 500
+SUMO_BINARY = "sumo"
 YELLOW_PHASE_OFFSET = 4
 YELLOW_DURATION = 4
 
