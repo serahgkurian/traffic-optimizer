@@ -22,7 +22,7 @@ TLS_ID = "J0"
 VEHICLES_PER_RUN = 300
 SUMO_BINARY = "sumo-gui"
 YELLOW_PHASE_OFFSET = 4
-YELLOW_DURATION = 3
+YELLOW_DURATION = 4
 
 # --- Policy Network ---
 class PolicyNetwork(tf.keras.Model):
