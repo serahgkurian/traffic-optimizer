@@ -134,7 +134,7 @@ for episode in range(EPISODES):
     while step < MAX_STEPS and traci.simulation.getMinExpectedNumber() > 0:
         state = get_state(current_phase)
         normalized_duration = policy_net(tf.convert_to_tensor([state], dtype=tf.float32))[0].numpy()[0]
-        duration = float(normalized_duration * 15 + 5)  # scale to [5, 20]
+        duration = float(normalized_duration * 25 + 5)  # scale to [5, 30]
         duration = int(duration)
 
         # Apply yellow phase before green
