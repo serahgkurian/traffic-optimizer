@@ -53,11 +53,18 @@ def compute_reward(current_phase):
     logic = traci.trafficlight.getAllProgramLogics(TLS_ID)[0]
     phase_state = logic.phases[current_phase].state
 
-    # Identify lanes with green light in current phase
+    logic = traci.trafficlight.getAllProgramLogics(TLS_ID)[0]
+    phase_state = logic.phases[current_phase].state
+    links = traci.trafficlight.getControlledLinks(TLS_ID)
+
     green_lane_ids = []
     for i, signal in enumerate(phase_state):
-        if signal == 'G' and i < len(green_lanes):
-            green_lane_ids.append(green_lanes[i])
+        if signal == 'G':
+            try:
+                incoming_lane = links[i][0][0]  # link format: [(incoming, outgoing, via), ...]
+                green_lane_ids.append(incoming_lane)
+            except:
+                pass
 
     # Count vehicles moving in green lanes
     moving_green = 0
@@ -134,7 +141,7 @@ for episode in range(EPISODES):
     while step < MAX_STEPS and traci.simulation.getMinExpectedNumber() > 0:
         state = get_state(current_phase)
         normalized_duration = policy_net(tf.convert_to_tensor([state], dtype=tf.float32))[0].numpy()[0]
-        duration = float(normalized_duration * 25 + 5)  # scale to [5, 30]
+        duration = float(normalized_duration * 55 + 5)  # scale to [5, 30]
         duration = int(duration)
 
         # Apply yellow phase before green
@@ -155,15 +162,17 @@ for episode in range(EPISODES):
             passed = compute_throughput()
             total_reward += reward
             total_throughput += passed
+            total_reward += passed
             traci.simulationStep()
             step += 1
             if step >= MAX_STEPS: break
 
-        reward = compute_reward(current_phase)
+        # reward = compute_reward(current_phase)
         passed = compute_throughput()
-        total_reward += reward
+        # total_reward += reward
         total_throughput += passed
 
+        total_reward += total_throughput
         avg_wait, avg_queue = get_avg_wait_and_queue()
         wait_time_accum.append(avg_wait)
         queue_len_accum.append(avg_queue)
@@ -185,5 +194,10 @@ for episode in range(EPISODES):
     with open("logs/episode_metrics.csv", "a", newline="") as f:
         csv.writer(f).writerow([episode + 1, total_reward, total_throughput, avg_wait, avg_queue])
 
-policy_net.save_weights("logs/policy_model_continuous.weights.h5")
-print("Model saved to logs/policy_model_continuous.h5")
+policy_net.save("logs/policy_model_continuous.keras")
+print("Model saved to logs/policy_model_continuous.keras")
+
+policy_net.save_weights("logs/policy_model_enhanced.weights.h5")
+print("Model saved to logs/policy_model_enhanced.weights.h5")
+
+
