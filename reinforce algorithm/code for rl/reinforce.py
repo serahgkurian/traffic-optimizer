@@ -141,20 +141,10 @@ for episode in range(EPISODES):
     while step < MAX_STEPS and traci.simulation.getMinExpectedNumber() > 0:
         state = get_state(current_phase)
         normalized_duration = policy_net(tf.convert_to_tensor([state], dtype=tf.float32))[0].numpy()[0]
-        duration = float(normalized_duration * 55 + 5)  # scale to [5, 30]
+        duration = float(normalized_duration * 25 + 5)  # scale to [5, 30]
         duration = int(duration)
 
-        # Apply yellow phase before green
-        yellow_phase = current_phase + YELLOW_PHASE_OFFSET
-        traci.trafficlight.setPhase(TLS_ID, yellow_phase)
-        for _ in range(YELLOW_DURATION):
-            passed = compute_throughput()
-            total_throughput += passed
-            traci.simulationStep()
-            step += 1
-            if step >= MAX_STEPS: break
 
-        if step >= MAX_STEPS: break
 
         traci.trafficlight.setPhase(TLS_ID, current_phase)
         for _ in range(duration):
@@ -166,6 +156,18 @@ for episode in range(EPISODES):
             traci.simulationStep()
             step += 1
             if step >= MAX_STEPS: break
+
+        # Apply yellow phase after green
+        yellow_phase = current_phase + YELLOW_PHASE_OFFSET
+        traci.trafficlight.setPhase(TLS_ID, yellow_phase)
+        for _ in range(YELLOW_DURATION):
+            passed = compute_throughput()
+            total_throughput += passed
+            traci.simulationStep()
+            step += 1
+            if step >= MAX_STEPS: break
+
+        if step >= MAX_STEPS: break
 
         # reward = compute_reward(current_phase)
         passed = compute_throughput()

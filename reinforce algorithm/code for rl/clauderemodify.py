@@ -267,23 +267,10 @@ for episode in range(EPISODES):
     while step < MAX_STEPS and traci.simulation.getMinExpectedNumber() > 0:
         state = get_state(current_phase)
         
-        # Get duration from policy network (8-28 seconds range)
+        # Get duration from policy network (8-48 seconds range)
         normalized_duration = policy_net(tf.convert_to_tensor([state], dtype=tf.float32))[0].numpy()[0]
-        duration = int(normalized_duration * 20 + 8)  # Scale to [8, 28] seconds
+        duration = int(normalized_duration * 40 + 8)  # Scale to [8, 48] seconds
         
-        # Apply yellow phase before green
-        yellow_phase = current_phase + YELLOW_PHASE_OFFSET
-        traci.trafficlight.setPhase(TLS_ID, yellow_phase)
-        for _ in range(YELLOW_DURATION):
-            # Count vehicles completing during yellow phase too
-            arrived_this_step = traci.simulation.getArrivedIDList()
-            total_throughput += len(arrived_this_step)
-            
-            traci.simulationStep()
-            step += 1
-            if step >= MAX_STEPS: break
-
-        if step >= MAX_STEPS: break
 
         # Apply green phase and track vehicles passed
         traci.trafficlight.setPhase(TLS_ID, current_phase)
@@ -298,6 +285,21 @@ for episode in range(EPISODES):
             step += 1
             if step >= MAX_STEPS: break
         
+        # Apply yellow phase after green
+        yellow_phase = current_phase + YELLOW_PHASE_OFFSET
+        traci.trafficlight.setPhase(TLS_ID, yellow_phase)
+        for _ in range(YELLOW_DURATION):
+            # Count vehicles completing during yellow phase too
+            arrived_this_step = traci.simulation.getArrivedIDList()
+            total_throughput += len(arrived_this_step)
+            
+            traci.simulationStep()
+            step += 1
+            if step >= MAX_STEPS: break
+
+
+        if step >= MAX_STEPS: break
+
         total_throughput += vehicles_passed_this_phase
 
         # Calculate enhanced reward for this phase

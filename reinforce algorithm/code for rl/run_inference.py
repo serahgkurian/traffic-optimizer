@@ -141,8 +141,8 @@ def run_single_inference(policy_net, run_id, show_gui=False):
         
         # Get action from trained policy
         normalized_duration = policy_net(tf.convert_to_tensor([state], dtype=tf.float32))[0].numpy()[0]
-        duration = float(normalized_duration * 25 + 5)  # scale to [5, 30]
-        duration = int(max(5, min(30, duration)))
+        duration = float(normalized_duration * 40 + 8)  # scale to [8, 48]
+        duration = int(max(8, min(48, duration)))
         
         phase_start_step = step
         phase_start_metrics = get_comprehensive_metrics()
