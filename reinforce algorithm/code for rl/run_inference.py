@@ -1,450 +1,532 @@
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 import traci
 import os
 import csv
 import matplotlib.pyplot as plt
-import pandas as pd
-from collections import defaultdict
+from collections import deque
+import time
 from generate_routes import generate_random_routes
 
-# Constants (same as training)
+# Constants (matching training script)
 PHASES = [0, 1, 2, 3]
-STATE_SIZE = 14 + 1
+STATE_SIZE = 74
 CONTROLLED_LANES = ['-north_0', '-north_0', '-north_1',
                     '-east_0', '-east_0', '-east_1', '-east_2',
                     '-south_0', '-south_0', '-south_1',
                     '-west_0', '-west_0', '-west_1', '-west_2']
 TLS_ID = "J0"
+VEHICLES_PER_RUN = 500
+SUMO_BINARY = "sumo-gui"  # Use GUI for inference visualization
 YELLOW_PHASE_OFFSET = 4
 YELLOW_DURATION = 4
-MAX_STEPS = 800
-VEHICLES_PER_RUN = 500
+MAX_STEPS = 1000
 
-# Policy Network class (same as training)
+# Duration range for inference (use full trained range)
+MIN_DURATION = 5
+MAX_DURATION = 30
+
+# --- Policy Network (matching training architecture) ---
 class PolicyNetwork(tf.keras.Model):
-    def __init__(self):
+    def __init__(self, state_size=74, hidden_sizes=[128, 256, 128], dropout_rate=0.2):
         super().__init__()
-        self.fc1 = tf.keras.layers.Dense(64, activation='relu')
-        self.fc2 = tf.keras.layers.Dense(64, activation='relu')
-        self.output_layer = tf.keras.layers.Dense(1, activation='sigmoid')
+        self.dropout_rate = dropout_rate
+        
+        # Deeper network with batch normalization
+        self.fc1 = tf.keras.layers.Dense(hidden_sizes[0], activation='relu')
+        self.bn1 = tf.keras.layers.BatchNormalization()
+        self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
+        
+        self.fc2 = tf.keras.layers.Dense(hidden_sizes[1], activation='relu')
+        self.bn2 = tf.keras.layers.BatchNormalization()
+        self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
+        
+        self.fc3 = tf.keras.layers.Dense(hidden_sizes[2], activation='relu')
+        self.bn3 = tf.keras.layers.BatchNormalization()
+        self.dropout3 = tf.keras.layers.Dropout(dropout_rate)
+        
+        # Separate heads for mean and std of duration distribution
+        self.duration_mean = tf.keras.layers.Dense(1, activation='sigmoid')
+        self.duration_std = tf.keras.layers.Dense(1, activation='softplus')
+        
+    def call(self, state, training=False):
+        x = self.dropout1(self.bn1(self.fc1(state)), training=training)
+        x = self.dropout2(self.bn2(self.fc2(x)), training=training)
+        x = self.dropout3(self.bn3(self.fc3(x)), training=training)
+        
+        mean = self.duration_mean(x)
+        std = self.duration_std(x) + 1e-6  # Ensure positive std
+        
+        return mean, std
 
-    def call(self, state):
-        x = self.fc1(state)
-        x = self.fc2(x)
-        return self.output_layer(x)
-
-def get_state(current_phase):
-    queue_lengths = [traci.lane.getLastStepHaltingNumber(lane) for lane in CONTROLLED_LANES]
-    return np.array(queue_lengths + [current_phase], dtype=np.float32)
-
-def compute_reward(current_phase):
-    green_lanes = traci.trafficlight.getControlledLanes(TLS_ID)
-    logic = traci.trafficlight.getAllProgramLogics(TLS_ID)[0]
-    phase_state = logic.phases[current_phase].state
-    links = traci.trafficlight.getControlledLinks(TLS_ID)
-
-    green_lane_ids = []
-    for i, signal in enumerate(phase_state):
-        if signal == 'G':
+# --- Helper Functions (matching training script) ---
+def get_enhanced_state(current_phase, phase_duration=0):
+    """Enhanced state representation with more traffic features"""
+    try:
+        # Current features - queue lengths
+        queue_lengths = [traci.lane.getLastStepHaltingNumber(lane) for lane in CONTROLLED_LANES]
+        
+        # New features
+        vehicle_speeds = []
+        waiting_times = []
+        approach_vehicles = []
+        
+        for lane in CONTROLLED_LANES:
             try:
-                incoming_lane = links[i][0][0]
-                green_lane_ids.append(incoming_lane)
-            except:
-                pass
+                veh_ids = traci.lane.getLastStepVehicleIDs(lane)
+                if veh_ids:
+                    speeds = []
+                    waits = []
+                    approaching = 0
+                    
+                    for v in veh_ids:
+                        try:
+                            speed = traci.vehicle.getSpeed(v)
+                            wait = traci.vehicle.getWaitingTime(v)
+                            speeds.append(speed)
+                            waits.append(wait)
+                            
+                            if speed > 0.1:
+                                approaching += 1
+                                
+                        except traci.exceptions.TraCIException:
+                            continue
+                    
+                    vehicle_speeds.append(np.mean(speeds) if speeds else 0)
+                    waiting_times.append(np.mean(waits) if waits else 0)
+                    approach_vehicles.append(approaching)
+                else:
+                    vehicle_speeds.append(0)
+                    waiting_times.append(0)
+                    approach_vehicles.append(0)
+                    
+            except traci.exceptions.TraCIException:
+                vehicle_speeds.append(0)
+                waiting_times.append(0)
+                approach_vehicles.append(0)
+        
+        # Traffic flow rates
+        flow_rates = []
+        for lane in CONTROLLED_LANES:
+            try:
+                flow_rates.append(traci.lane.getLastStepVehicleNumber(lane))
+            except traci.exceptions.TraCIException:
+                flow_rates.append(0)
+        
+        # Phase timing information
+        phase_features = [
+            current_phase / 3.0,
+            phase_duration / 50.0,
+            np.sin(2 * np.pi * current_phase / 4),
+            np.cos(2 * np.pi * current_phase / 4)
+        ]
+        
+        # Combine all features
+        state = np.array(queue_lengths + vehicle_speeds + waiting_times + 
+                        approach_vehicles + flow_rates + phase_features, dtype=np.float32)
+        
+        # Simple normalization
+        state = np.clip(state, -10, 10)
+        
+        return state
+        
+    except Exception as e:
+        print(f"Error in get_enhanced_state: {e}")
+        return np.zeros(STATE_SIZE, dtype=np.float32)
 
-    moving_green = 0
-    for lane in green_lane_ids:
-        for veh_id in traci.lane.getLastStepVehicleIDs(lane):
-            if traci.vehicle.getSpeed(veh_id) > 0.1:
-                moving_green += 1
-
-    stopped_total = 0
-    for lane in CONTROLLED_LANES:
-        stopped_total += traci.lane.getLastStepHaltingNumber(lane)
-
-    reward = 2.0 * moving_green - 1.0 * stopped_total
-    return reward
-
-def get_comprehensive_metrics():
-    """Get detailed performance metrics"""
-    metrics = {}
-    
-    # Throughput metrics
-    metrics['vehicles_arrived'] = len(traci.simulation.getArrivedIDList())
-    metrics['vehicles_departed'] = len(traci.simulation.getDepartedIDList())
-    metrics['vehicles_running'] = traci.simulation.getMinExpectedNumber()
-    
-    # Waiting time and queue metrics
+def get_avg_wait_and_queue():
+    """Get average waiting time and queue length across all controlled lanes"""
     total_wait = 0
     total_queue = 0
     total_vehicles = 0
-    lane_metrics = {}
     
     for lane in CONTROLLED_LANES:
-        veh_ids = traci.lane.getLastStepVehicleIDs(lane)
-        lane_queue = sum(1 for v in veh_ids if traci.vehicle.getSpeed(v) < 0.1)
-        lane_wait = sum(traci.vehicle.getWaitingTime(v) for v in veh_ids)
-        
-        lane_metrics[lane] = {
-            'vehicles': len(veh_ids),
-            'queue': lane_queue,
-            'total_wait': lane_wait,
-            'avg_wait': lane_wait / len(veh_ids) if len(veh_ids) > 0 else 0
-        }
-        
-        total_queue += lane_queue
-        total_wait += lane_wait
-        total_vehicles += len(veh_ids)
+        try:
+            veh_ids = traci.lane.getLastStepVehicleIDs(lane)
+            for v in veh_ids:
+                try:
+                    total_wait += traci.vehicle.getWaitingTime(v)
+                    if traci.vehicle.getSpeed(v) < 0.1:
+                        total_queue += 1
+                    total_vehicles += 1
+                except:
+                    continue
+        except:
+            continue
     
-    metrics['avg_waiting_time'] = total_wait / total_vehicles if total_vehicles > 0 else 0
-    metrics['avg_queue_length'] = total_queue / len(CONTROLLED_LANES)
-    metrics['total_queue'] = total_queue
-    metrics['lane_metrics'] = lane_metrics
+    avg_wait = total_wait / total_vehicles if total_vehicles > 0 else 0
+    avg_queue = total_queue / len(CONTROLLED_LANES) if CONTROLLED_LANES else 0
     
-    # Speed metrics
-    all_speeds = []
-    for lane in CONTROLLED_LANES:
-        for veh_id in traci.lane.getLastStepVehicleIDs(lane):
-            all_speeds.append(traci.vehicle.getSpeed(veh_id))
-    
-    metrics['avg_speed'] = np.mean(all_speeds) if all_speeds else 0
-    metrics['speed_std'] = np.std(all_speeds) if all_speeds else 0
-    
-    return metrics
+    return avg_wait, avg_queue
 
-def run_single_inference(policy_net, run_id, show_gui=False):
-    """Run a single inference session and collect detailed metrics"""
-    
-    # Generate routes
-    route_file = r"../code for rl/random_routes.rou.xml"
-    generate_random_routes(route_file, num_vehicles=VEHICLES_PER_RUN)
-    
-    # Start SUMO
-    sumo_binary = "sumo-gui" if show_gui else "sumo"
-    traci.start([sumo_binary, "-c", "../trafficinter.sumocfg"])
-    
-    current_phase = 0
-    step = 0
-    
-    # Data collection
-    phase_data = []
-    step_metrics = []
-    total_reward = 0
-    phase_count = 0
-    
-    print(f"Run {run_id}: Starting inference...")
-    
-    while step < MAX_STEPS and traci.simulation.getMinExpectedNumber() > 0:
-        # Get current state
-        state = get_state(current_phase)
-        
-        # Get action from trained policy
-        normalized_duration = policy_net(tf.convert_to_tensor([state], dtype=tf.float32))[0].numpy()[0]
-        duration = float(normalized_duration * 40 + 8)  # scale to [8, 48]
-        duration = int(max(8, min(48, duration)))
-        
-        phase_start_step = step
-        phase_start_metrics = get_comprehensive_metrics()
-        
-        # Apply yellow phase
-        yellow_phase = current_phase + YELLOW_PHASE_OFFSET
-        traci.trafficlight.setPhase(TLS_ID, yellow_phase)
-        for _ in range(YELLOW_DURATION):
-            traci.simulationStep()
-            step += 1
-            if step >= MAX_STEPS: break
-        
-        if step >= MAX_STEPS: break
-        
-        # Apply green phase and collect metrics during the phase
-        traci.trafficlight.setPhase(TLS_ID, current_phase)
-        phase_rewards = []
-        
-        for phase_step in range(duration):
-            reward = compute_reward(current_phase)
-            phase_rewards.append(reward)
-            total_reward += reward
-            
-            # Collect step-by-step metrics every 10 steps
-            if step % 10 == 0:
-                metrics = get_comprehensive_metrics()
-                metrics['step'] = step
-                metrics['phase'] = current_phase
-                metrics['run_id'] = run_id
-                step_metrics.append(metrics)
-            
-            traci.simulationStep()
-            step += 1
-            if step >= MAX_STEPS: break
-        
-        # Phase summary
-        phase_end_metrics = get_comprehensive_metrics()
-        phase_info = {
-            'run_id': run_id,
-            'phase_number': phase_count,
-            'phase_id': current_phase,
-            'duration': duration,
-            'start_step': phase_start_step,
-            'end_step': step,
-            'avg_reward': np.mean(phase_rewards),
-            'total_reward': sum(phase_rewards),
-            'queue_start': phase_start_metrics['total_queue'],
-            'queue_end': phase_end_metrics['total_queue'],
-            'queue_reduction': phase_start_metrics['total_queue'] - phase_end_metrics['total_queue'],
-            'throughput_during_phase': phase_end_metrics['vehicles_arrived'] - phase_start_metrics['vehicles_arrived'],
-            'avg_wait_start': phase_start_metrics['avg_waiting_time'],
-            'avg_wait_end': phase_end_metrics['avg_waiting_time'],
-            'avg_speed': phase_end_metrics['avg_speed']
-        }
-        phase_data.append(phase_info)
-        
-        print(f"  Phase {current_phase} (#{phase_count}): {duration}s, Reward: {np.mean(phase_rewards):.2f}, "
-              f"Queue: {phase_start_metrics['total_queue']}→{phase_end_metrics['total_queue']}, "
-              f"Throughput: {phase_info['throughput_during_phase']}")
-        
-        current_phase = (current_phase + 1) % 4
-        phase_count += 1
-    
-    # Final metrics
-    final_metrics = get_comprehensive_metrics()
-    final_metrics['run_id'] = run_id
-    final_metrics['total_reward'] = total_reward
-    final_metrics['total_phases'] = phase_count
-    final_metrics['total_steps'] = step
-    
-    print(f"Run {run_id} completed: Total Reward: {total_reward:.2f}, "
-          f"Throughput: {final_metrics['vehicles_arrived']}, "
-          f"Avg Wait: {final_metrics['avg_waiting_time']:.2f}s")
-    
-    traci.close()
-    
-    return final_metrics, phase_data, step_metrics
-
-def run_multiple_inference_sessions(num_runs=5, show_gui_last=True):
-    """Run multiple inference sessions and collect comprehensive data"""
-    
-    # Load model
+def get_total_vehicles_in_simulation():
+    """Get total number of vehicles currently in simulation"""
     try:
-        policy_net = tf.keras.models.load_model("logs/policy_model_continuous.keras")
-        print("Loaded full model successfully")
+        return traci.vehicle.getIDCount()
     except:
-        policy_net = PolicyNetwork()
+        return 0
+
+# --- Inference Class ---
+class TrafficLightInference:
+    def __init__(self, model_path):
+        """Initialize inference with trained model"""
+        self.policy_net = PolicyNetwork(state_size=STATE_SIZE)
+        
+        # Build the model by doing a forward pass first
         dummy_state = tf.zeros((1, STATE_SIZE))
-        _ = policy_net(dummy_state)
-        policy_net.load_weights("logs/policy_model_enhanced.weights.h5")
-        print("Loaded model weights successfully")
-    
-    # Create results directory
-    os.makedirs("inference_results", exist_ok=True)
-    
-    all_run_data = []
-    all_phase_data = []
-    all_step_data = []
-    
-    for run_id in range(1, num_runs + 1):
-        show_gui = show_gui_last and (run_id == num_runs)
-        run_metrics, phase_data, step_data = run_single_inference(policy_net, run_id, show_gui)
+        _ = self.policy_net(dummy_state, training=False)
+        print("Model architecture built successfully")
         
-        all_run_data.append(run_metrics)
-        all_phase_data.extend(phase_data)
-        all_step_data.extend(step_data)
-    
-    # Save raw data
-    save_results_to_csv(all_run_data, all_phase_data, all_step_data)
-    
-    # Generate visualizations
-    create_performance_visualizations(all_run_data, all_phase_data, all_step_data)
-    
-    # Print summary statistics
-    print_summary_statistics(all_run_data, all_phase_data)
-    
-    return all_run_data, all_phase_data, all_step_data
-
-def save_results_to_csv(run_data, phase_data, step_data):
-    """Save all collected data to CSV files"""
-    
-    # Run summary data
-    df_runs = pd.DataFrame(run_data)
-    df_runs.to_csv("inference_results/run_summary.csv", index=False)
-    
-    # Phase-by-phase data
-    df_phases = pd.DataFrame(phase_data)
-    df_phases.to_csv("inference_results/phase_details.csv", index=False)
-    
-    # Step-by-step data (if not too large)
-    if step_data:
-        df_steps = pd.DataFrame(step_data)
-        df_steps.to_csv("inference_results/step_metrics.csv", index=False)
-    
-    print("Data saved to CSV files in inference_results/")
-
-def create_performance_visualizations(run_data, phase_data, step_data):
-    """Create comprehensive performance visualizations"""
-    
-    df_runs = pd.DataFrame(run_data)
-    df_phases = pd.DataFrame(phase_data)
-    
-    # Create subplots
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-    fig.suptitle('Traffic Light RL Performance Analysis', fontsize=16)
-    
-    # 1. Throughput across runs
-    axes[0,0].bar(df_runs['run_id'], df_runs['vehicles_arrived'])
-    axes[0,0].set_title('Vehicle Throughput by Run')
-    axes[0,0].set_xlabel('Run ID')
-    axes[0,0].set_ylabel('Vehicles Arrived')
-    axes[0,0].grid(True, alpha=0.3)
-    
-    # 2. Average waiting time across runs
-    axes[0,1].bar(df_runs['run_id'], df_runs['avg_waiting_time'])
-    axes[0,1].set_title('Average Waiting Time by Run')
-    axes[0,1].set_xlabel('Run ID')
-    axes[0,1].set_ylabel('Avg Wait Time (s)')
-    axes[0,1].grid(True, alpha=0.3)
-    
-    # 3. Total reward across runs
-    axes[0,2].bar(df_runs['run_id'], df_runs['total_reward'])
-    axes[0,2].set_title('Total Reward by Run')
-    axes[0,2].set_xlabel('Run ID')
-    axes[0,2].set_ylabel('Total Reward')
-    axes[0,2].grid(True, alpha=0.3)
-    
-    # 4. Phase duration distribution
-    axes[1,0].hist(df_phases['duration'], bins=15, alpha=0.7, edgecolor='black')
-    axes[1,0].set_title('Distribution of Phase Durations')
-    axes[1,0].set_xlabel('Duration (s)')
-    axes[1,0].set_ylabel('Frequency')
-    axes[1,0].grid(True, alpha=0.3)
-    
-    # 5. Queue reduction by phase
-    axes[1,1].scatter(df_phases['duration'], df_phases['queue_reduction'], alpha=0.6)
-    axes[1,1].set_title('Queue Reduction vs Phase Duration')
-    axes[1,1].set_xlabel('Phase Duration (s)')
-    axes[1,1].set_ylabel('Queue Reduction')
-    axes[1,1].grid(True, alpha=0.3)
-    
-    # 6. Performance by phase type
-    phase_performance = df_phases.groupby('phase_id').agg({
-        'avg_reward': 'mean',
-        'queue_reduction': 'mean',
-        'throughput_during_phase': 'mean'
-    })
-    
-    x = range(len(phase_performance))
-    width = 0.25
-    axes[1,2].bar([i - width for i in x], phase_performance['avg_reward'], width, label='Avg Reward', alpha=0.8)
-    axes[1,2].bar(x, phase_performance['queue_reduction'], width, label='Queue Reduction', alpha=0.8)
-    axes[1,2].bar([i + width for i in x], phase_performance['throughput_during_phase'], width, label='Throughput', alpha=0.8)
-    axes[1,2].set_title('Performance by Phase Type')
-    axes[1,2].set_xlabel('Phase ID')
-    axes[1,2].set_xticks(x)
-    axes[1,2].set_xticklabels([f'Phase {i}' for i in phase_performance.index])
-    axes[1,2].legend()
-    axes[1,2].grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig('inference_results/performance_analysis.png', dpi=300, bbox_inches='tight')
-    plt.show()
-    
-    # Additional time-series plot if step data available
-    if step_data:
-        create_time_series_plots(step_data)
-
-def create_time_series_plots(step_data):
-    """Create time-series visualizations"""
-    df_steps = pd.DataFrame(step_data)
-    
-    if len(df_steps) == 0:
-        return
-    
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-    fig.suptitle('Time Series Performance Metrics', fontsize=16)
-    
-    # Plot for each run
-    for run_id in df_steps['run_id'].unique():
-        run_data = df_steps[df_steps['run_id'] == run_id]
+        # Load trained weights
+        model_loaded = False
+        if os.path.exists(model_path):
+            try:
+                self.policy_net.load_weights(model_path)
+                print(f"✓ Loaded trained model from {model_path}")
+                model_loaded = True
+            except Exception as e:
+                print(f"✗ Error loading model weights: {e}")
+                print("Trying alternative loading method...")
+                
+                # Try loading with skip_mismatch
+                try:
+                    self.policy_net.load_weights(model_path, skip_mismatch=True)
+                    print(f"✓ Loaded model with skip_mismatch from {model_path}")
+                    model_loaded = True
+                except Exception as e2:
+                    print(f"✗ Alternative loading also failed: {e2}")
         
-        axes[0,0].plot(run_data['step'], run_data['vehicles_arrived'], label=f'Run {run_id}', alpha=0.7)
-        axes[0,1].plot(run_data['step'], run_data['avg_waiting_time'], label=f'Run {run_id}', alpha=0.7)
-        axes[1,0].plot(run_data['step'], run_data['total_queue'], label=f'Run {run_id}', alpha=0.7)
-        axes[1,1].plot(run_data['step'], run_data['avg_speed'], label=f'Run {run_id}', alpha=0.7)
+        if not model_loaded:
+            print(f"⚠ Warning: Could not load model from {model_path}")
+            if os.path.exists("logs"):
+                print("Available model files in logs/:")
+                for f in os.listdir("logs"):
+                    if f.endswith('.weights.h5') or f.endswith('.h5'):
+                        print(f"  - logs/{f}")
+            print("Using randomly initialized model for demonstration")
+        
+        self.metrics = {
+            'step_times': [],
+            'waiting_times': [],
+            'queue_lengths': [],
+            'throughput': [],
+            'phase_durations': [],
+            'vehicle_counts': []
+        }
+        
+        self.model_loaded = model_loaded
+        
+    def predict_duration(self, state, use_mean=False):
+        """Predict phase duration from state"""
+        state_tensor = tf.convert_to_tensor([state], dtype=tf.float32)
+        mean, std = self.policy_net(state_tensor, training=False)
+        
+        if use_mean:
+            # Use mean for deterministic behavior
+            normalized_duration = mean[0][0]
+        else:
+            # Sample from distribution
+            dist = tfp.distributions.Normal(mean[0][0], std[0][0])
+            normalized_duration = dist.sample()
+        
+        # Clip and scale to duration range
+        normalized_duration = tf.clip_by_value(normalized_duration, 0.0, 1.0)
+        duration = int(normalized_duration * (MAX_DURATION - MIN_DURATION) + MIN_DURATION)
+        
+        return duration, float(mean[0][0]), float(std[0][0])
     
-    axes[0,0].set_title('Cumulative Throughput vs Time')
-    axes[0,0].set_xlabel('Simulation Step')
-    axes[0,0].set_ylabel('Vehicles Arrived')
-    axes[0,0].legend()
-    axes[0,0].grid(True, alpha=0.3)
+    def run_inference(self, num_runs=3, use_mean=False, save_results=True):
+        """Run inference for multiple simulation runs"""
+        model_status = "trained" if self.model_loaded else "randomly initialized"
+        print(f"Starting inference with {model_status} model...")
+        print(f"Number of runs: {num_runs}")
+        print(f"Use mean predictions: {use_mean}")
+        
+        all_run_metrics = []
+        
+        for run in range(num_runs):
+            print(f"\n--- Run {run + 1}/{num_runs} ---")
+            
+            # Generate routes for this run
+            route_file = "../code for rl/random_routes.rou.xml"
+            generate_random_routes(route_file, num_vehicles=VEHICLES_PER_RUN)
+            
+            run_metrics = self._single_run(run, use_mean)
+            all_run_metrics.append(run_metrics)
+            
+            print(f"Run {run + 1} completed:")
+            print(f"  Total throughput: {run_metrics['total_throughput']}")
+            print(f"  Average wait time: {run_metrics['avg_wait_time']:.2f}s")
+            print(f"  Average queue length: {run_metrics['avg_queue_length']:.2f}")
+            print(f"  Phases completed: {run_metrics['phases_completed']}")
+            print(f"  Average phase duration: {run_metrics['avg_phase_duration']:.1f}s")
+        
+        # Calculate summary statistics
+        self._print_summary_statistics(all_run_metrics)
+        
+        if save_results:
+            self._save_results(all_run_metrics)
+            
+        return all_run_metrics
     
-    axes[0,1].set_title('Average Waiting Time vs Time')
-    axes[0,1].set_xlabel('Simulation Step')
-    axes[0,1].set_ylabel('Avg Wait Time (s)')
-    axes[0,1].legend()
-    axes[0,1].grid(True, alpha=0.3)
+    def _single_run(self, run_id, use_mean):
+        """Run a single inference simulation"""
+        try:
+            traci.start([SUMO_BINARY, "-c", "../trafficinter.sumocfg"])
+        except Exception as e:
+            print(f"Error starting SUMO: {e}")
+            return None
+        
+        current_phase = 0
+        step = 0
+        total_throughput = 0
+        wait_times = []
+        queue_lengths = []
+        phase_durations = []
+        vehicle_counts = []
+        
+        try:
+            while step < MAX_STEPS and traci.simulation.getMinExpectedNumber() > 0:
+                # Get current state
+                state = get_enhanced_state(current_phase, 0)
+                
+                # Predict duration
+                duration, mean_pred, std_pred = self.predict_duration(state, use_mean)
+                phase_durations.append(duration)
+                
+                print(f"Phase {current_phase}: Duration={duration}s (mean={mean_pred:.3f}, std={std_pred:.3f})")
+                
+                # Apply green phase
+                traci.trafficlight.setPhase(TLS_ID, current_phase)
+                vehicles_passed_this_phase = 0
+                
+                for phase_step in range(duration):
+                    if step >= MAX_STEPS:
+                        break
+                    
+                    # Count vehicles that complete their journey
+                    arrived_this_step = traci.simulation.getArrivedIDList()
+                    vehicles_passed_this_phase += len(arrived_this_step)
+                    
+                    # Collect metrics
+                    avg_wait, avg_queue = get_avg_wait_and_queue()
+                    vehicle_count = get_total_vehicles_in_simulation()
+                    
+                    wait_times.append(avg_wait)
+                    queue_lengths.append(avg_queue)
+                    vehicle_counts.append(vehicle_count)
+                    
+                    traci.simulationStep()
+                    step += 1
+                
+                if step >= MAX_STEPS:
+                    break
+                
+                # Apply yellow phase
+                yellow_phase = current_phase + YELLOW_PHASE_OFFSET
+                traci.trafficlight.setPhase(TLS_ID, yellow_phase)
+                for _ in range(YELLOW_DURATION):
+                    if step >= MAX_STEPS:
+                        break
+                    
+                    arrived_this_step = traci.simulation.getArrivedIDList()
+                    vehicles_passed_this_phase += len(arrived_this_step)
+                    
+                    # Continue collecting metrics
+                    avg_wait, avg_queue = get_avg_wait_and_queue()
+                    vehicle_count = get_total_vehicles_in_simulation()
+                    
+                    wait_times.append(avg_wait)
+                    queue_lengths.append(avg_queue)
+                    vehicle_counts.append(vehicle_count)
+                    
+                    traci.simulationStep()
+                    step += 1
+                
+                if step >= MAX_STEPS:
+                    break
+                
+                total_throughput += vehicles_passed_this_phase
+                current_phase = (current_phase + 1) % 4
+                
+        except Exception as e:
+            print(f"Error during simulation: {e}")
+        finally:
+            try:
+                traci.close()
+            except:
+                pass
+        
+        # Calculate run metrics
+        run_metrics = {
+            'run_id': run_id,
+            'total_throughput': total_throughput,
+            'avg_wait_time': np.mean(wait_times) if wait_times else 0,
+            'avg_queue_length': np.mean(queue_lengths) if queue_lengths else 0,
+            'phases_completed': len(phase_durations),
+            'avg_phase_duration': np.mean(phase_durations) if phase_durations else 0,
+            'max_wait_time': np.max(wait_times) if wait_times else 0,
+            'max_queue_length': np.max(queue_lengths) if queue_lengths else 0,
+            'steps_completed': step,
+            'wait_times': wait_times,
+            'queue_lengths': queue_lengths,
+            'phase_durations': phase_durations,
+            'vehicle_counts': vehicle_counts
+        }
+        
+        return run_metrics
     
-    axes[1,0].set_title('Total Queue Length vs Time')
-    axes[1,0].set_xlabel('Simulation Step')
-    axes[1,0].set_ylabel('Total Queue Length')
-    axes[1,0].legend()
-    axes[1,0].grid(True, alpha=0.3)
+    def _print_summary_statistics(self, all_run_metrics):
+        """Print summary statistics across all runs"""
+        print("\n" + "="*50)
+        print("INFERENCE SUMMARY STATISTICS")
+        print("="*50)
+        
+        throughputs = [m['total_throughput'] for m in all_run_metrics]
+        wait_times = [m['avg_wait_time'] for m in all_run_metrics]
+        queue_lengths = [m['avg_queue_length'] for m in all_run_metrics]
+        phase_durations = [m['avg_phase_duration'] for m in all_run_metrics]
+        
+        print(f"Throughput - Mean: {np.mean(throughputs):.1f} ± {np.std(throughputs):.1f}")
+        print(f"Wait Time - Mean: {np.mean(wait_times):.2f}s ± {np.std(wait_times):.2f}s")
+        print(f"Queue Length - Mean: {np.mean(queue_lengths):.2f} ± {np.std(queue_lengths):.2f}")
+        print(f"Phase Duration - Mean: {np.mean(phase_durations):.1f}s ± {np.std(phase_durations):.1f}s")
+        print("="*50)
     
-    axes[1,1].set_title('Average Speed vs Time')
-    axes[1,1].set_xlabel('Simulation Step')
-    axes[1,1].set_ylabel('Avg Speed (m/s)')
-    axes[1,1].legend()
-    axes[1,1].grid(True, alpha=0.3)
+    def _save_results(self, all_run_metrics):
+        """Save results to CSV and create plots"""
+        os.makedirs("inference_results", exist_ok=True)
+        
+        # Save summary statistics
+        with open("inference_results/summary_statistics.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Run", "TotalThroughput", "AvgWaitTime", "AvgQueueLength", 
+                           "PhasesCompleted", "AvgPhaseDuration", "MaxWaitTime", "MaxQueueLength"])
+            
+            for metrics in all_run_metrics:
+                writer.writerow([
+                    metrics['run_id'] + 1,
+                    metrics['total_throughput'],
+                    metrics['avg_wait_time'],
+                    metrics['avg_queue_length'],
+                    metrics['phases_completed'],
+                    metrics['avg_phase_duration'],
+                    metrics['max_wait_time'],
+                    metrics['max_queue_length']
+                ])
+        
+        # Create plots
+        self._create_plots(all_run_metrics)
+        
+        print(f"\nResults saved to 'inference_results/' directory")
     
-    plt.tight_layout()
-    plt.savefig('inference_results/time_series_analysis.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    def _create_plots(self, all_run_metrics):
+        """Create visualization plots"""
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        
+        # Plot 1: Throughput comparison
+        throughputs = [m['total_throughput'] for m in all_run_metrics]
+        axes[0,0].bar(range(1, len(throughputs) + 1), throughputs)
+        axes[0,0].set_title('Throughput per Run')
+        axes[0,0].set_xlabel('Run')
+        axes[0,0].set_ylabel('Total Vehicles')
+        
+        # Plot 2: Average wait time
+        wait_times = [m['avg_wait_time'] for m in all_run_metrics]
+        axes[0,1].bar(range(1, len(wait_times) + 1), wait_times)
+        axes[0,1].set_title('Average Wait Time per Run')
+        axes[0,1].set_xlabel('Run')
+        axes[0,1].set_ylabel('Wait Time (s)')
+        
+        # Plot 3: Queue lengths over time (first run)
+        if all_run_metrics:
+            queue_data = all_run_metrics[0]['queue_lengths']
+            axes[0,2].plot(queue_data)
+            axes[0,2].set_title('Queue Length Over Time (Run 1)')
+            axes[0,2].set_xlabel('Time Step')
+            axes[0,2].set_ylabel('Queue Length')
+        
+        # Plot 4: Phase durations (first run)
+        if all_run_metrics:
+            phase_data = all_run_metrics[0]['phase_durations']
+            axes[1,0].plot(phase_data, 'o-')
+            axes[1,0].set_title('Phase Durations (Run 1)')
+            axes[1,0].set_xlabel('Phase Number')
+            axes[1,0].set_ylabel('Duration (s)')
+        
+        # Plot 5: Vehicle counts over time (first run)
+        if all_run_metrics:
+            vehicle_data = all_run_metrics[0]['vehicle_counts']
+            axes[1,1].plot(vehicle_data)
+            axes[1,1].set_title('Vehicles in Simulation (Run 1)')
+            axes[1,1].set_xlabel('Time Step')
+            axes[1,1].set_ylabel('Vehicle Count')
+        
+        # Plot 6: Wait times over time (first run)
+        if all_run_metrics:
+            wait_data = all_run_metrics[0]['wait_times']
+            axes[1,2].plot(wait_data)
+            axes[1,2].set_title('Wait Times Over Time (Run 1)')
+            axes[1,2].set_xlabel('Time Step')
+            axes[1,2].set_ylabel('Average Wait Time (s)')
+        
+        plt.tight_layout()
+        plt.savefig('inference_results/inference_analysis.png', dpi=300, bbox_inches='tight')
+        plt.close()
 
-def print_summary_statistics(run_data, phase_data):
-    """Print comprehensive summary statistics"""
-    df_runs = pd.DataFrame(run_data)
-    df_phases = pd.DataFrame(phase_data)
+# --- Main Function ---
+def main():
+    """Main inference function"""
+    # Configuration
+    MODEL_PATHS = [
+        "logs/policy_model_final.weights.h5",
+        "logs/policy_model_ep150.weights.h5", 
+        "logs/policy_model_ep100.weights.h5",
+        "logs/policy_model_ep50.weights.h5"
+    ]
     
-    print("\n" + "="*60)
-    print("COMPREHENSIVE PERFORMANCE SUMMARY")
-    print("="*60)
+    NUM_RUNS = 3  # Number of simulation runs
+    USE_MEAN = False  # Whether to use mean predictions (deterministic) or sample from distribution
     
-    print(f"\nRUN STATISTICS (across {len(df_runs)} runs):")
-    print(f"Average Throughput: {df_runs['vehicles_arrived'].mean():.2f} ± {df_runs['vehicles_arrived'].std():.2f}")
-    print(f"Average Wait Time: {df_runs['avg_waiting_time'].mean():.2f} ± {df_runs['avg_waiting_time'].std():.2f} seconds")
-    print(f"Average Queue Length: {df_runs['avg_queue_length'].mean():.2f} ± {df_runs['avg_queue_length'].std():.2f}")
-    print(f"Average Speed: {df_runs['avg_speed'].mean():.2f} ± {df_runs['speed_std'].mean():.2f} m/s")
-    print(f"Total Reward: {df_runs['total_reward'].mean():.2f} ± {df_runs['total_reward'].std():.2f}")
+    print("Traffic Light Control - Inference Mode")
+    print("=====================================")
     
-    print(f"\nPHASE STATISTICS (across {len(df_phases)} phase transitions):")
-    print(f"Average Phase Duration: {df_phases['duration'].mean():.2f} ± {df_phases['duration'].std():.2f} seconds")
-    print(f"Average Queue Reduction per Phase: {df_phases['queue_reduction'].mean():.2f}")
-    print(f"Average Throughput per Phase: {df_phases['throughput_during_phase'].mean():.2f}")
+    # Find the best available model
+    MODEL_PATH = None
+    for path in MODEL_PATHS:
+        if os.path.exists(path):
+            MODEL_PATH = path
+            break
     
-    print(f"\nPHASE TYPE BREAKDOWN:")
-    phase_stats = df_phases.groupby('phase_id').agg({
-        'duration': ['mean', 'std'],
-        'avg_reward': ['mean', 'std'],
-        'queue_reduction': ['mean', 'std'],
-        'throughput_during_phase': ['mean', 'std']
-    }).round(2)
+    if MODEL_PATH is None:
+        print("No trained model found. Checking logs directory...")
+        if os.path.exists("logs"):
+            model_files = [f for f in os.listdir("logs") if f.endswith('.weights.h5')]
+            if model_files:
+                MODEL_PATH = os.path.join("logs", model_files[0])
+                print(f"Using first available model: {MODEL_PATH}")
+            else:
+                print("No .weights.h5 files found in logs/")
+                MODEL_PATH = "dummy_path"  # Will trigger random initialization
+        else:
+            print("logs/ directory not found")
+            MODEL_PATH = "dummy_path"  # Will trigger random initialization
     
-    for phase_id in sorted(df_phases['phase_id'].unique()):
-        print(f"  Phase {phase_id}:")
-        print(f"    Duration: {phase_stats.loc[phase_id, ('duration', 'mean')]} ± {phase_stats.loc[phase_id, ('duration', 'std')]}")
-        print(f"    Avg Reward: {phase_stats.loc[phase_id, ('avg_reward', 'mean')]} ± {phase_stats.loc[phase_id, ('avg_reward', 'std')]}")
-        print(f"    Queue Reduction: {phase_stats.loc[phase_id, ('queue_reduction', 'mean')]} ± {phase_stats.loc[phase_id, ('queue_reduction', 'std')]}")
-
-# Main execution
-if __name__ == "__main__":
-    print("Starting comprehensive inference analysis...")
+    print(f"Model path: {MODEL_PATH}")
     
-    # Run multiple inference sessions
-    num_runs = 5  # Adjust as needed
-    run_data, phase_data, step_data = run_multiple_inference_sessions(
-        num_runs=num_runs, 
-        show_gui_last=True  # Show GUI only for the last run
+    # Initialize inference
+    inference = TrafficLightInference(MODEL_PATH)
+    
+    # Run inference
+    results = inference.run_inference(
+        num_runs=NUM_RUNS,
+        use_mean=USE_MEAN,
+        save_results=True
     )
     
-    print(f"\nAnalysis complete! Check the 'inference_results/' folder for:")
-    print("- CSV files with detailed data")
-    print("- Performance visualization plots")
-    print("- Summary statistics printed above")
+    print("\nInference completed successfully!")
+    print("Check 'inference_results/' directory for detailed results and plots.")
+
+if __name__ == "__main__":
+    main()

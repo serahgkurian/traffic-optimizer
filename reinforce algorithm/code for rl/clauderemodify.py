@@ -11,7 +11,7 @@ from generate_routes import generate_random_routes
 
 # Constants
 PHASES = [0, 1, 2, 3]
-STATE_SIZE = 60  # Enhanced state size (14 lanes * 4 features + 4 phase features)
+STATE_SIZE = 74  # Enhanced state size (14 lanes * 5 features + 4 phase features)
 GAMMA = 0.99
 INITIAL_LEARNING_RATE = 0.001
 EPISODES = 150
@@ -76,7 +76,7 @@ class AdaptiveRewards:
 
 # --- Enhanced Policy Network ---
 class PolicyNetwork(tf.keras.Model):
-    def __init__(self, state_size=60, hidden_sizes=[128, 256, 128], dropout_rate=0.2):
+    def __init__(self, state_size=74, hidden_sizes=[128, 256, 128], dropout_rate=0.2):
         super().__init__()
         self.dropout_rate = dropout_rate
         
@@ -109,7 +109,7 @@ class PolicyNetwork(tf.keras.Model):
 
 # --- Baseline Network for Variance Reduction ---
 class BaselineNetwork(tf.keras.Model):
-    def __init__(self, state_size=60, hidden_sizes=[64, 128, 64]):
+    def __init__(self, state_size=74, hidden_sizes=[64, 128, 64]):
         super().__init__()
         self.fc1 = tf.keras.layers.Dense(hidden_sizes[0], activation='relu')
         self.fc2 = tf.keras.layers.Dense(hidden_sizes[1], activation='relu')
@@ -481,14 +481,14 @@ def main():
         print(f"\n--- Episode {episode + 1}/{EPISODES} ---")
         
         # Generate routes
-        route_file = r"C:\\github repos\\traffic_optimizerDQN\\reinforce algorithm\\code for rl\\random_routes.rou.xml"
+        route_file = "../code for rl/random_routes.rou.xml"
         generate_random_routes(route_file, num_vehicles=VEHICLES_PER_RUN)
 
         # Show GUI on last episode
         sumo_binary = "sumo-gui" if episode == EPISODES - 1 else SUMO_BINARY
         
         try:
-            traci.start([sumo_binary, "-c", "C:\\github repos\\traffic_optimizerDQN\\reinforce algorithm\\trafficinter.sumocfg"])
+            traci.start([sumo_binary, "-c", "../trafficinter.sumocfg"])
         except Exception as e:
             print(f"Error starting SUMO: {e}")
             continue
