@@ -12,7 +12,7 @@ PHASES = [0, 1, 2, 3]
 STATE_SIZE = 14 + 1  # 14 lanes + current phase
 GAMMA = 0.99
 LEARNING_RATE = 0.001
-EPISODES = 200
+EPISODES = 300
 MAX_STEPS = 800
 CONTROLLED_LANES = ['-north_0', '-north_0', '-north_1',
                     '-east_0', '-east_0', '-east_1', '-east_2',
@@ -23,6 +23,18 @@ VEHICLES_PER_RUN = 500
 SUMO_BINARY = "sumo"
 YELLOW_PHASE_OFFSET = 4
 YELLOW_DURATION = 4
+
+# Reward weights
+THROUGHPUT_WEIGHT = 12.0
+GREEN_EFFICIENCY_MOVING_WEIGHT = 2.0
+GREEN_EFFICIENCY_STOPPED_PENALTY = 1.0
+AVERAGE_WAIT_PENALTY = 0.8
+RED_LANE_WAIT_PENALTY = 0.1
+RED_LANE_QUEUE_PENALTY = 0.05
+LESS_DURATION_PENALTY = 0.5
+MORE_DURATION_PENALTY = 1.5
+STARVATION_PREVENTION_WEIGHT = 3.0
+
 
 # --- Policy Network ---
 class PolicyNetwork(tf.keras.Model):
@@ -67,7 +79,7 @@ def compute_enhanced_reward(current_phase, phase_duration, vehicles_passed_this_
     # Component 1: Throughput reward (primary objective)
     # Ensure non-negative throughput
     vehicles_passed = max(0, vehicles_passed_this_phase)
-    throughput_reward = vehicles_passed * 12.0  # High weight for vehicles that passed
+    throughput_reward = vehicles_passed * THROUGHPUT_WEIGHT # High weight for vehicles that passed
     
     # Component 2: Green lane efficiency - vehicles moving vs stopped
     green_moving_vehicles = 0
@@ -91,7 +103,7 @@ def compute_enhanced_reward(current_phase, phase_duration, vehicles_passed_this_
                 continue
     
     # Reward for vehicles moving in green lanes, penalty for stopped vehicles
-    green_efficiency_reward = green_moving_vehicles * 2.0 - green_stopped_vehicles * 1.0
+    green_efficiency_reward = green_moving_vehicles * GREEN_EFFICIENCY_MOVING_WEIGHT - green_stopped_vehicles * GREEN_EFFICIENCY_STOPPED_PENALTY
     
     # Component 3: Waiting time penalty (for all controlled lanes)
     total_wait_time = 0
@@ -108,13 +120,13 @@ def compute_enhanced_reward(current_phase, phase_duration, vehicles_passed_this_
                 
                 # Extra penalty for vehicles waiting in red lanes
                 if lane not in green_lane_ids and wait_time > 10:  # More than 10 seconds waiting
-                    red_lane_wait_penalty += (wait_time - 10) * 0.1
+                    red_lane_wait_penalty += (wait_time - 10) * RED_LANE_WAIT_PENALTY
             except traci.exceptions.TraCIException:
                 # Vehicle might have left during the step
                 continue
     
     # Average waiting time penalty
-    avg_wait_penalty = (total_wait_time / max(total_vehicles, 1)) * 0.5
+    avg_wait_penalty = (total_wait_time / max(total_vehicles, 1)) * AVERAGE_WAIT_PENALTY
     
     # Component 4: Queue length considerations
     red_lane_queue_penalty = 0
@@ -127,7 +139,7 @@ def compute_enhanced_reward(current_phase, phase_duration, vehicles_passed_this_
                 green_lane_queue_length += queue_length
             else:
                 # Penalty increases quadratically with queue length in red lanes
-                red_lane_queue_penalty += queue_length * queue_length * 0.05
+                red_lane_queue_penalty += queue_length * queue_length * RED_LANE_QUEUE_PENALTY
         except traci.exceptions.TraCIException:
             continue
     
@@ -138,9 +150,9 @@ def compute_enhanced_reward(current_phase, phase_duration, vehicles_passed_this_
     duration_penalty = 0
     # If there are vehicles in green lanes and we're switching too early
     if green_lane_queue_length > 0 and phase_duration < min_efficient_duration:
-        duration_penalty = (min_efficient_duration - phase_duration) * green_lane_queue_length * 0.5
+        duration_penalty = (min_efficient_duration - phase_duration) * green_lane_queue_length * LESS_DURATION_PENALTY
     elif phase_duration > max_efficient_duration:
-        duration_penalty = (phase_duration - max_efficient_duration) * 1.5
+        duration_penalty = (phase_duration - max_efficient_duration) * MORE_DURATION_PENALTY
     
     # Component 6: Starvation prevention - reward for serving high-wait-time directions
     max_wait_in_direction = {}
@@ -167,7 +179,7 @@ def compute_enhanced_reward(current_phase, phase_duration, vehicles_passed_this_
     if max_wait_in_direction:
         max_overall_wait = max(max_wait_in_direction.values())
         if max_overall_wait > 0:
-            starvation_prevention_reward = (current_direction_wait / max_overall_wait) * 3.0
+            starvation_prevention_reward = (current_direction_wait / max_overall_wait) * STARVATION_PREVENTION_WEIGHT
     
     # Final reward calculation
     total_reward = (throughput_reward +                    # Primary: vehicles passed
