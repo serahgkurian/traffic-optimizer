@@ -24,8 +24,8 @@ YELLOW_DURATION = 4
 MAX_STEPS = 1000
 
 # Duration range for inference (use full trained range)
-MIN_DURATION = 4
-MAX_DURATION = 40
+MIN_DURATION = 5
+MAX_DURATION = 30
 
 # --- Policy Network (matching training architecture) ---
 class PolicyNetwork(tf.keras.Model):

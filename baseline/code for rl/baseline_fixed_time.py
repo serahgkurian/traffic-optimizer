@@ -22,7 +22,7 @@ YELLOW_DURATION = 4
 MAX_STEPS = 1000
 
 # Fixed timing parameters for baseline
-FIXED_GREEN_DURATION = 30  # Fixed green phase duration in seconds
+FIXED_GREEN_DURATION = 22  # Fixed green phase duration in seconds
 ADAPTIVE_MODE = False  # Set to True for simple adaptive control
 
 # --- Enhanced Helper Functions ---
