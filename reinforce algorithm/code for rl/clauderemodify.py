@@ -34,11 +34,11 @@ BATCH_SIZE = 32
 # Duration range (adaptive)
 def get_duration_range(episode):
     if episode < 50:
-        return 8, 20    # Conservative range initially
+        return 10, 20    # Conservative range initially
     elif episode < 150:
-        return 6, 25    # Expand range
+        return 8, 30    # Expand range
     else:
-        return 5, 30    # Full range after learning basics
+        return 4, 40    # Full range after learning basics
 
 # Adaptive reward weights
 class AdaptiveRewards:

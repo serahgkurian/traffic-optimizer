@@ -1,6 +1,4 @@
 import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
 import traci
 import os
 import csv
@@ -18,47 +16,14 @@ CONTROLLED_LANES = ['-north_0', '-north_0', '-north_1',
                     '-west_0', '-west_0', '-west_1', '-west_2']
 TLS_ID = "J0"
 VEHICLES_PER_RUN = 500
-SUMO_BINARY = "sumo-gui"  # Use GUI for inference visualization
+SUMO_BINARY = "sumo-gui"  # Use GUI for visualization
 YELLOW_PHASE_OFFSET = 4
 YELLOW_DURATION = 4
 MAX_STEPS = 1000
 
-# Duration range for inference (use full trained range)
-MIN_DURATION = 4
-MAX_DURATION = 40
-
-# --- Policy Network (matching training architecture) ---
-class PolicyNetwork(tf.keras.Model):
-    def __init__(self, state_size=74, hidden_sizes=[128, 256, 128], dropout_rate=0.2):
-        super().__init__()
-        self.dropout_rate = dropout_rate
-        
-        # Deeper network with batch normalization
-        self.fc1 = tf.keras.layers.Dense(hidden_sizes[0], activation='relu')
-        self.bn1 = tf.keras.layers.BatchNormalization()
-        self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
-        
-        self.fc2 = tf.keras.layers.Dense(hidden_sizes[1], activation='relu')
-        self.bn2 = tf.keras.layers.BatchNormalization()
-        self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
-        
-        self.fc3 = tf.keras.layers.Dense(hidden_sizes[2], activation='relu')
-        self.bn3 = tf.keras.layers.BatchNormalization()
-        self.dropout3 = tf.keras.layers.Dropout(dropout_rate)
-        
-        # Separate heads for mean and std of duration distribution
-        self.duration_mean = tf.keras.layers.Dense(1, activation='sigmoid')
-        self.duration_std = tf.keras.layers.Dense(1, activation='softplus')
-        
-    def call(self, state, training=False):
-        x = self.dropout1(self.bn1(self.fc1(state)), training=training)
-        x = self.dropout2(self.bn2(self.fc2(x)), training=training)
-        x = self.dropout3(self.bn3(self.fc3(x)), training=training)
-        
-        mean = self.duration_mean(x)
-        std = self.duration_std(x) + 1e-6  # Ensure positive std
-        
-        return mean, std
+# Fixed timing parameters for baseline
+FIXED_GREEN_DURATION = 30  # Fixed green phase duration in seconds
+ADAPTIVE_MODE = False  # Set to True for simple adaptive control
 
 # --- Enhanced Helper Functions ---
 def get_enhanced_state(current_phase, phase_duration=0):
@@ -193,104 +158,74 @@ def get_comprehensive_metrics():
     
     return metrics
 
-def get_avg_wait_and_queue():
-    """Get average waiting time and queue length across all controlled lanes"""
-    total_wait = 0
+def get_phase_queue_length(phase):
+    """Get queue length for lanes corresponding to a specific phase"""
+    # Define which lanes correspond to each phase
+    phase_lanes = {
+        0: ['-north_0', '-north_1', '-south_0', '-south_1'],  # North-South
+        1: ['-east_0', '-east_1', '-east_2', '-west_0', '-west_1', '-west_2'],  # East-West
+        2: ['-north_0', '-north_1', '-south_0', '-south_1'],  # North-South
+        3: ['-east_0', '-east_1', '-east_2', '-west_0', '-west_1', '-west_2']   # East-West
+    }
+    
     total_queue = 0
-    total_vehicles = 0
-    
-    for lane in CONTROLLED_LANES:
-        try:
-            veh_ids = traci.lane.getLastStepVehicleIDs(lane)
-            for v in veh_ids:
-                try:
-                    total_wait += traci.vehicle.getWaitingTime(v)
-                    if traci.vehicle.getSpeed(v) < 0.1:
-                        total_queue += 1
-                    total_vehicles += 1
-                except:
-                    continue
-        except:
-            continue
-    
-    avg_wait = total_wait / total_vehicles if total_vehicles > 0 else 0
-    avg_queue = total_queue / len(CONTROLLED_LANES) if CONTROLLED_LANES else 0
-    
-    return avg_wait, avg_queue
-
-def get_total_vehicles_in_simulation():
-    """Get total number of vehicles currently in simulation"""
-    try:
-        return traci.vehicle.getIDCount()
-    except:
-        return 0
-
-# --- Inference Class ---
-class TrafficLightInference:
-    def __init__(self, model_path):
-        """Initialize inference with trained model"""
-        self.policy_net = PolicyNetwork(state_size=STATE_SIZE)
-        
-        # Build the model by doing a forward pass first
-        dummy_state = tf.zeros((1, STATE_SIZE))
-        _ = self.policy_net(dummy_state, training=False)
-        print("Model architecture built successfully")
-        
-        # Load trained weights
-        model_loaded = False
-        if os.path.exists(model_path):
+    if phase in phase_lanes:
+        for lane in phase_lanes[phase]:
             try:
-                self.policy_net.load_weights(model_path)
-                print(f"✓ Loaded trained model from {model_path}")
-                model_loaded = True
-            except Exception as e:
-                print(f"✗ Error loading model weights: {e}")
-                print("Trying alternative loading method...")
-                
-                # Try loading with skip_mismatch
-                try:
-                    self.policy_net.load_weights(model_path, skip_mismatch=True)
-                    print(f"✓ Loaded model with skip_mismatch from {model_path}")
-                    model_loaded = True
-                except Exception as e2:
-                    print(f"✗ Alternative loading also failed: {e2}")
-        
-        if not model_loaded:
-            print(f"⚠ Warning: Could not load model from {model_path}")
-            if os.path.exists("logs"):
-                print("Available model files in logs/:")
-                for f in os.listdir("logs"):
-                    if f.endswith('.weights.h5') or f.endswith('.h5'):
-                        print(f"  - logs/{f}")
-            print("Using randomly initialized model for demonstration")
-        
-        self.model_loaded = model_loaded
-        
-    def predict_duration(self, state, use_mean=False):
-        """Predict phase duration from state"""
-        state_tensor = tf.convert_to_tensor([state], dtype=tf.float32)
-        mean, std = self.policy_net(state_tensor, training=False)
-        
-        if use_mean:
-            # Use mean for deterministic behavior
-            normalized_duration = mean[0][0]
-        else:
-            # Sample from distribution
-            dist = tfp.distributions.Normal(mean[0][0], std[0][0])
-            normalized_duration = dist.sample()
-        
-        # Clip and scale to duration range
-        normalized_duration = tf.clip_by_value(normalized_duration, 0.0, 1.0)
-        duration = int(normalized_duration * (MAX_DURATION - MIN_DURATION) + MIN_DURATION)
-        
-        return duration, float(mean[0][0]), float(std[0][0])
+                total_queue += traci.lane.getLastStepHaltingNumber(lane)
+            except traci.exceptions.TraCIException:
+                continue
     
-    def run_inference(self, num_runs=3, use_mean=False, save_results=True):
-        """Run inference for multiple simulation runs"""
-        model_status = "trained" if self.model_loaded else "randomly initialized"
-        print(f"Starting inference with {model_status} model...")
+    return total_queue
+
+def get_adaptive_duration(current_phase):
+    """Simple adaptive duration based on queue length"""
+    if not ADAPTIVE_MODE:
+        return FIXED_GREEN_DURATION
+    
+    # Get queue length for current phase
+    queue_length = get_phase_queue_length(current_phase)
+    
+    # Adaptive logic: extend green time if there's a queue
+    base_duration = FIXED_GREEN_DURATION
+    if queue_length > 5:
+        # Extend green time for longer queues
+        extension = min(queue_length * 2, 15)  # Max 15 seconds extension
+        return base_duration + extension
+    elif queue_length == 0:
+        # Reduce green time if no queue
+        return max(base_duration - 5, 8)  # Minimum 8 seconds
+    else:
+        return base_duration
+
+# --- Baseline Traffic Light Controller ---
+class BaselineTrafficLight:
+    def __init__(self, control_type="fixed"):
+        """
+        Initialize baseline traffic light controller
+        control_type: "fixed" for fixed timing, "adaptive" for simple adaptive control
+        """
+        self.control_type = control_type
+        global ADAPTIVE_MODE
+        ADAPTIVE_MODE = (control_type == "adaptive")
+        
+        print(f"Initialized {control_type} traffic light controller")
+        if control_type == "fixed":
+            print(f"Fixed green duration: {FIXED_GREEN_DURATION} seconds")
+        else:
+            print(f"Adaptive control with base duration: {FIXED_GREEN_DURATION} seconds")
+        
+    def get_phase_duration(self, current_phase):
+        """Get phase duration based on control type"""
+        if self.control_type == "fixed":
+            return FIXED_GREEN_DURATION
+        else:
+            return get_adaptive_duration(current_phase)
+    
+    def run_baseline(self, num_runs=3, save_results=True):
+        """Run baseline traffic light control for multiple simulation runs"""
+        print(f"Starting baseline traffic light control ({self.control_type})...")
         print(f"Number of runs: {num_runs}")
-        print(f"Use mean predictions: {use_mean}")
         
         all_run_metrics = []
         
@@ -301,27 +236,31 @@ class TrafficLightInference:
             route_file = "../code for rl/random_routes.rou.xml"
             generate_random_routes(route_file, num_vehicles=VEHICLES_PER_RUN)
             
-            run_metrics = self._single_run(run, use_mean)
-            all_run_metrics.append(run_metrics)
-            
-            print(f"Run {run + 1} completed:")
-            print(f"  Total throughput: {run_metrics['total_throughput']}")
-            print(f"  Average wait time: {run_metrics['avg_wait_time']:.2f}s")
-            print(f"  Average queue length: {run_metrics['avg_queue_length']:.2f}")
-            print(f"  Phases completed: {run_metrics['phases_completed']}")
-            print(f"  Average phase duration: {run_metrics['avg_phase_duration']:.1f}s")
-            print(f"  Average speed: {run_metrics['avg_speed']:.2f}m/s")
+            run_metrics = self._single_run(run)
+            if run_metrics:
+                all_run_metrics.append(run_metrics)
+                
+                print(f"Run {run + 1} completed:")
+                print(f"  Total throughput: {run_metrics['total_throughput']}")
+                print(f"  Average wait time: {run_metrics['avg_wait_time']:.2f}s")
+                print(f"  Average queue length: {run_metrics['avg_queue_length']:.2f}")
+                print(f"  Phases completed: {run_metrics['phases_completed']}")
+                print(f"  Average phase duration: {run_metrics['avg_phase_duration']:.1f}s")
+                print(f"  Average speed: {run_metrics['avg_speed']:.2f}m/s")
+            else:
+                print(f"Run {run + 1} failed")
         
-        # Calculate summary statistics
-        self._print_summary_statistics(all_run_metrics)
-        
-        if save_results:
-            self._save_results(all_run_metrics)
+        if all_run_metrics:
+            # Calculate summary statistics
+            self._print_summary_statistics(all_run_metrics)
             
+            if save_results:
+                self._save_results(all_run_metrics)
+                
         return all_run_metrics
     
-    def _single_run(self, run_id, use_mean):
-        """Run a single inference simulation"""
+    def _single_run(self, run_id):
+        """Run a single baseline simulation"""
         try:
             traci.start([SUMO_BINARY, "-c", "../trafficinter.sumocfg"])
         except Exception as e:
@@ -331,7 +270,6 @@ class TrafficLightInference:
         current_phase = 0
         step = 0
         total_throughput = 0
-        cumulative_throughput = []
         
         # Time series data for plots
         time_series_data = {
@@ -354,19 +292,19 @@ class TrafficLightInference:
         
         try:
             while step < MAX_STEPS and traci.simulation.getMinExpectedNumber() > 0:
-                # Get current state
-                state = get_enhanced_state(current_phase, 0)
-                
-                # Predict duration
-                duration, mean_pred, std_pred = self.predict_duration(state, use_mean)
+                # Get phase duration
+                duration = self.get_phase_duration(current_phase)
                 phase_data['durations'].append(duration)
                 phase_data['phase_numbers'].append(phase_counter)
                 
-                print(f"Phase {current_phase}: Duration={duration}s (mean={mean_pred:.3f}, std={std_pred:.3f})")
+                if self.control_type == "adaptive":
+                    queue_length = get_phase_queue_length(current_phase)
+                    print(f"Phase {current_phase}: Duration={duration}s (queue={queue_length})")
+                else:
+                    print(f"Phase {current_phase}: Duration={duration}s (fixed)")
                 
                 # Apply green phase
                 traci.trafficlight.setPhase(TLS_ID, current_phase)
-                vehicles_passed_this_phase = 0
                 
                 for phase_step in range(duration):
                     if step >= MAX_STEPS:
@@ -438,6 +376,7 @@ class TrafficLightInference:
         # Calculate run metrics
         run_metrics = {
             'run_id': run_id,
+            'control_type': self.control_type,
             'total_throughput': total_throughput,
             'avg_wait_time': np.mean(time_series_data['wait_times']) if time_series_data['wait_times'] else 0,
             'avg_queue_length': np.mean(time_series_data['queue_lengths']) if time_series_data['queue_lengths'] else 0,
@@ -456,7 +395,7 @@ class TrafficLightInference:
     def _print_summary_statistics(self, all_run_metrics):
         """Print summary statistics across all runs"""
         print("\n" + "="*50)
-        print("INFERENCE SUMMARY STATISTICS")
+        print(f"BASELINE SUMMARY STATISTICS ({self.control_type.upper()})")
         print("="*50)
         
         throughputs = [m['total_throughput'] for m in all_run_metrics]
@@ -474,17 +413,19 @@ class TrafficLightInference:
     
     def _save_results(self, all_run_metrics):
         """Save results to CSV and create plots"""
-        os.makedirs("inference_results", exist_ok=True)
+        results_dir = f"baseline_results_{self.control_type}"
+        os.makedirs(results_dir, exist_ok=True)
         
         # Save summary statistics
-        with open("inference_results/summary_statistics.csv", "w", newline="") as f:
+        with open(f"{results_dir}/summary_statistics.csv", "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["Run", "TotalThroughput", "AvgWaitTime", "AvgQueueLength", 
+            writer.writerow(["Run", "ControlType", "TotalThroughput", "AvgWaitTime", "AvgQueueLength", 
                            "AvgSpeed", "PhasesCompleted", "AvgPhaseDuration", "MaxWaitTime", "MaxQueueLength"])
             
             for metrics in all_run_metrics:
                 writer.writerow([
                     metrics['run_id'] + 1,
+                    metrics['control_type'],
                     metrics['total_throughput'],
                     metrics['avg_wait_time'],
                     metrics['avg_queue_length'],
@@ -496,17 +437,17 @@ class TrafficLightInference:
                 ])
         
         # Save detailed time series data
-        self._save_time_series_data(all_run_metrics)
+        self._save_time_series_data(all_run_metrics, results_dir)
         
         # Create plots
-        self._create_comprehensive_plots(all_run_metrics)
+        self._create_comprehensive_plots(all_run_metrics, results_dir)
         
-        print(f"\nResults saved to 'inference_results/' directory")
+        print(f"\nResults saved to '{results_dir}/' directory")
     
-    def _save_time_series_data(self, all_run_metrics):
+    def _save_time_series_data(self, all_run_metrics, results_dir):
         """Save detailed time series data for each run"""
         for i, metrics in enumerate(all_run_metrics):
-            filename = f"inference_results/time_series_run_{i+1}.csv"
+            filename = f"{results_dir}/time_series_run_{i+1}.csv"
             time_data = metrics['time_series_data']
             
             with open(filename, "w", newline="") as f:
@@ -525,14 +466,14 @@ class TrafficLightInference:
                         time_data['avg_speeds'][j]
                     ])
     
-    def _create_comprehensive_plots(self, all_run_metrics):
+    def _create_comprehensive_plots(self, all_run_metrics, results_dir):
         """Create comprehensive visualization plots"""
         # Set up the plotting style
         plt.style.use('default')
         
         # Create time series plots (3x3 grid)
         fig1, axes = plt.subplots(3, 3, figsize=(18, 12))
-        fig1.suptitle('Traffic Light Control - Time Series Analysis', fontsize=16)
+        fig1.suptitle(f'Baseline Traffic Light Control ({self.control_type.title()}) - Time Series Analysis', fontsize=16)
         
         # Use first run for time series plots
         if all_run_metrics:
@@ -607,19 +548,17 @@ class TrafficLightInference:
             axes[2,2].grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig('inference_results/comprehensive_analysis.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'{results_dir}/comprehensive_analysis.png', dpi=300, bbox_inches='tight')
         plt.close()
         
         # Create additional comparison plots
-        self._create_comparison_plots(all_run_metrics)
+        if len(all_run_metrics) > 1:
+            self._create_comparison_plots(all_run_metrics, results_dir)
     
-    def _create_comparison_plots(self, all_run_metrics):
+    def _create_comparison_plots(self, all_run_metrics, results_dir):
         """Create comparison plots across all runs"""
-        if len(all_run_metrics) < 2:
-            return
-            
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-        fig.suptitle('Multi-Run Comparison Analysis', fontsize=14)
+        fig.suptitle(f'Multi-Run Comparison Analysis ({self.control_type.title()})', fontsize=14)
         
         # Plot 1: Queue length comparison across runs
         for i, metrics in enumerate(all_run_metrics):
@@ -655,7 +594,6 @@ class TrafficLightInference:
         axes[1,0].grid(True, alpha=0.3)
         
         # Plot 4: Performance metrics summary
-        metrics_names = ['Throughput', 'Avg Wait Time', 'Avg Queue Length', 'Avg Speed']
         run_numbers = list(range(1, len(all_run_metrics) + 1))
         
         # Normalize metrics for comparison (0-1 scale)
@@ -692,78 +630,30 @@ class TrafficLightInference:
         axes[1,1].grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig('inference_results/multi_run_comparison.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'{results_dir}/multi_run_comparison.png', dpi=300, bbox_inches='tight')
         plt.close()
 
-# --- Main Function ---
 def main():
-    """Main inference function"""
-    # Configuration
-    MODEL_PATHS = [
-        "logs/policy_model_final.weights.h5"
-    ]
+    """Main baseline function"""
+    print("Traffic Light Control - Baseline Mode")
+    print("====================================")
+    print("Available control types:")
+    print("1. Fixed Timing Control")
+    print("2. Simple Adaptive Control")
     
-    NUM_RUNS = 3  # Number of simulation runs
-    USE_MEAN = False  # Whether to use mean predictions (deterministic) or sample from distribution
-    
-    print("Traffic Light Control - Enhanced Inference Mode")
-    print("==============================================")
-    
-    # Find the best available model
-    MODEL_PATH = None
-    for path in MODEL_PATHS:
-        if os.path.exists(path):
-            MODEL_PATH = path
-            break
-    
-    if MODEL_PATH is None:
-        print("No trained model found. Checking logs directory...")
-        if os.path.exists("logs"):
-            model_files = [f for f in os.listdir("logs") if f.endswith('.weights.h5')]
-            if model_files:
-                MODEL_PATH = os.path.join("logs", model_files[0])
-                print(f"Using first available model: {MODEL_PATH}")
-            else:
-                print("No .weights.h5 files found in logs/")
-                MODEL_PATH = "dummy_path"  # Will trigger random initialization
-        else:
-            print("logs/ directory not found")
-            MODEL_PATH = "dummy_path"  # Will trigger random initialization
-    
-    print(f"Model path: {MODEL_PATH}")
-    
-    # Initialize inference
-    inference = TrafficLightInference(MODEL_PATH)
-    
-    # Run inference
-    results = inference.run_inference(
-        num_runs=NUM_RUNS,
-        use_mean=USE_MEAN,
-        save_results=True
-    )
-    
-    print("\nInference completed successfully!")
-    print("Generated plots:")
-    print("  - comprehensive_analysis.png: 9 time series and summary plots")
-    print("  - multi_run_comparison.png: Comparison across multiple runs")
-    print("Check 'inference_results/' directory for:")
-    print("  - Detailed CSV files with time series data")
-    print("  - Summary statistics")
-    print("  - Visualization plots")
-    
-    # Print final performance summary
-    if results:
-        print(f"\nFINAL PERFORMANCE SUMMARY:")
-        print(f"Average across {len(results)} runs:")
-        avg_throughput = np.mean([r['total_throughput'] for r in results])
-        avg_wait = np.mean([r['avg_wait_time'] for r in results])
-        avg_speed = np.mean([r['avg_speed'] for r in results])
-        avg_queue = np.mean([r['avg_queue_length'] for r in results])
-        
-        print(f"  Throughput: {avg_throughput:.1f} vehicles")
-        print(f"  Wait Time: {avg_wait:.2f} seconds")
-        print(f"  Average Speed: {avg_speed:.2f} m/s")
-        print(f"  Queue Length: {avg_queue:.2f} vehicles")
+    choice = input("Select control type (1 or 2): ").strip()
+    if choice == "1":
+        controller = BaselineTrafficLight(control_type="fixed")
+    elif choice == "2":
+        controller = BaselineTrafficLight(control_type="adaptive")
+    else:
+        print("Invalid selection. Exiting.")
+        return
+
+    num_runs = input("Enter number of simulation runs (default=3): ").strip()
+    num_runs = int(num_runs) if num_runs.isdigit() else 3
+
+    controller.run_baseline(num_runs=num_runs)
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,29 @@
+<additional>
+    <tlLogic id="J0" type="static" programID="0" offset="0">
+        <!-- Phase 1: East-West Straight and right -->
+        <phase duration="30" state="rrrGGGrrrrGGGr"/>
+        <!-- Phase 2: East-West Straight and right -->
+        <phase duration="4" state="rrryyyrrrryyyr"/>
+
+        <!-- Phase 3: East-West Left -->
+        <phase duration="30" state="rrrrrrGrrrrrrG"/>
+        <!-- Phase 4: East-West Left -->
+        <phase duration="4" state="rrrrrryrrrrrry"/>
+        
+        <!-- Phase 5: North-South Straight and right -->
+        <phase duration="30" state="GGrrrrrGGrrrrr"/>
+        <!-- Phase 6: North-South Straight and right -->
+        <phase duration="4" state="yyrrrrryyrrrrr"/>
+
+        <!-- Phase 7: North-South Left -->
+        <phase duration="30" state="rrGrrrrrrGrrrr"/>
+        <!-- Phase 8: North-South Left -->
+        <phase duration="4" state="rryrrrrrryrrrr"/>
+        
+    </tlLogic>
+</additional>
+
+<!-- ('-north_0', '-north_0', '-north_1',
+'-east_0', '-east_0', '-east_1', '-east_2',
+'-south_0', '-south_0', '-south_1', 
+'-west_0', '-west_0', '-west_1', '-west_2') -->

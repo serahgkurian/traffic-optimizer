@@ -5,29 +5,20 @@
         <!-- Phase 2: East-West Left -->
         <phase duration="30" state="rrrrrrGrrrrrrG"/>
         
-        <!-- Phase 3: East-West Right
-        <phase duration="15" state="rrrGrrrrrrGrrr"/> -->
-
-        <!-- Phase 4: North-South Straight and right -->
+        <!-- Phase 3: North-South Straight and right -->
         <phase duration="30" state="GGrrrrrGGrrrrr"/>
-        <!-- Phase 5: North-South Left -->
+        <!-- Phase 4: North-South Left -->
         <phase duration="30" state="rrGrrrrrrGrrrr"/>
 
-        <!-- Phase 6: North-South Right
-        <phase duration="15" state="GrrrrrrGrrrrrr"/> -->
-
         <!-- Yellow phases -->
-        <!-- Phase 1: East-West Straight and right -->
+        <!-- Phase 5: East-West Straight and right -->
         <phase duration="30" state="rrryyyrrrryyyr"/>
-        <!-- Phase 2: East-West Left -->
+        <!-- Phase 6: East-West Left -->
         <phase duration="30" state="rrrrrryrrrrrry"/>
         
-        <!-- Phase 3: East-West Right
-        <phase duration="15" state="rrrGrrrrrrGrrr"/> -->
-
-        <!-- Phase 4: North-South Straight and right -->
+        <!-- Phase 7: North-South Straight and right -->
         <phase duration="30" state="yyrrrrryyrrrrr"/>
-        <!-- Phase 5: North-South Left -->
+        <!-- Phase 8: North-South Left -->
         <phase duration="30" state="rryrrrrrryrrrr"/>
         
     </tlLogic>
