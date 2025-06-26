@@ -11,11 +11,11 @@ from generate_routes import generate_random_routes
 
 # Constants
 PHASES = [0, 1, 2, 3]
-STATE_SIZE = 60  # Enhanced state size (14 lanes * 4 features + 4 phase features)
+STATE_SIZE = 74  # Enhanced state size (14 lanes * 4 features + 4 phase features)
 GAMMA = 0.99
 INITIAL_LEARNING_RATE = 0.001
 EPISODES = 150
-MAX_STEPS = 800
+MAX_STEPS = 1000
 CONTROLLED_LANES = ['-north_0', '-north_0', '-north_1',
                     '-east_0', '-east_0', '-east_1', '-east_2',
                     '-south_0', '-south_0', '-south_1',
@@ -34,11 +34,11 @@ BATCH_SIZE = 32
 # Duration range (adaptive)
 def get_duration_range(episode):
     if episode < 50:
-        return 8, 20    # Conservative range initially
+        return 20, 40    # Conservative range initially
     elif episode < 75:
-        return 6, 25    # Expand range
+        return 10, 40    # Expand range
     else:
-        return 5, 30    # Full range after learning basics
+        return 5, 40    # Full range after learning basics
 
 # Adaptive reward weights
 class AdaptiveRewards:
@@ -60,7 +60,7 @@ class AdaptiveRewards:
         # If throughput is consistently low, increase its weight
         if len(self.throughput_history) > 10:
             recent_throughput = np.mean(list(self.throughput_history)[-10:])
-            if recent_throughput < 400:  # Adjust threshold based on your setup
+            if recent_throughput < 300:  # Adjust threshold based on your setup
                 throughput_multiplier = 1.5
             else:
                 throughput_multiplier = 1.0
@@ -76,7 +76,7 @@ class AdaptiveRewards:
 
 # --- Enhanced Policy Network ---
 class PolicyNetwork(tf.keras.Model):
-    def __init__(self, state_size=60, hidden_sizes=[128, 256, 128], dropout_rate=0.2):
+    def __init__(self, state_size=74, hidden_sizes=[128, 256, 128], dropout_rate=0.2):
         super().__init__()
         self.dropout_rate = dropout_rate
         
@@ -109,7 +109,7 @@ class PolicyNetwork(tf.keras.Model):
 
 # --- Baseline Network for Variance Reduction ---
 class BaselineNetwork(tf.keras.Model):
-    def __init__(self, state_size=60, hidden_sizes=[64, 128, 64]):
+    def __init__(self, state_size=74, hidden_sizes=[64, 128, 64]):
         super().__init__()
         self.fc1 = tf.keras.layers.Dense(hidden_sizes[0], activation='relu')
         self.fc2 = tf.keras.layers.Dense(hidden_sizes[1], activation='relu')
@@ -377,7 +377,7 @@ def get_learning_rate(episode, initial_lr=0.001):
     """Learning rate scheduling"""
     if episode < 100:
         return initial_lr
-    elif episode < 200:
+    elif episode < 125:
         return initial_lr * 0.5
     else:
         return initial_lr * 0.1
@@ -408,8 +408,8 @@ def train_with_baseline(policy_net, baseline_net, policy_optimizer, baseline_opt
         advantages = returns - baselines
         
         # Normalize advantages
-        if tf.reduce_std(advantages) > 1e-8:
-            advantages = (advantages - tf.reduce_mean(advantages)) / (tf.reduce_std(advantages) + 1e-8)
+        if tf.math.reduce_std(advantages) > 1e-8:
+            advantages = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-8)
         
         # Train baseline network
         with tf.GradientTape() as baseline_tape:

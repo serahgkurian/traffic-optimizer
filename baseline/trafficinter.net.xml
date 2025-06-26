@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2025-06-18 21:08:35 by Eclipse SUMO netedit Version 1.23.1
+<!-- generated on 2025-06-22 22:11:53 by Eclipse SUMO netedit Version 1.23.1
 <neteditConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/neteditConfiguration.xsd">
 
     <input>
-        <sumocfg-file value="G:\traffic_optimizerDQN copy\trafficinter.sumocfg"/>
-        <route-files value="G:\traffic_optimizerDQN copy\code for rl/random_routes.rou.xml"/>
-        <sumo-net-file value="G:\traffic_optimizerDQN copy\trafficinter.net.xml"/>
+        <sumocfg-file value="G:\github repos\traffic_optimizerDQN\baseline\trafficinter.sumocfg"/>
+        <route-files value="G:\github repos\traffic_optimizerDQN\baseline\code%20for%20rl/random_routes.rou.xml"/>
+        <sumo-net-file value="G:\github repos\traffic_optimizerDQN\baseline\trafficinter.net.xml"/>
     </input>
 
     <output>
-        <output-file value="G:\traffic_optimizerDQN copy\trafficinter.net.xml"/>
+        <output-file value="G:\github repos\traffic_optimizerDQN\baseline\trafficinter.net.xml"/>
     </output>
 
     <processing>
@@ -113,13 +113,13 @@
 
     <tlLogic id="J0" type="static" programID="0" offset="0">
         <phase duration="30" state="rrrGGGrrrrGGGr"/>
+        <phase duration="4"  state="rrryyyrrrryyyr"/>
         <phase duration="30" state="rrrrrrGrrrrrrG"/>
+        <phase duration="4"  state="rrrrrryrrrrrry"/>
         <phase duration="30" state="GGrrrrrGGrrrrr"/>
+        <phase duration="4"  state="yyrrrrryyrrrrr"/>
         <phase duration="30" state="rrGrrrrrrGrrrr"/>
-        <phase duration="30" state="rrryyyrrrryyyr"/>
-        <phase duration="30" state="rrrrrryrrrrrry"/>
-        <phase duration="30" state="yyrrrrryyrrrrr"/>
-        <phase duration="30" state="rryrrrrrryrrrr"/>
+        <phase duration="4"  state="rryrrrrrryrrrr"/>
     </tlLogic>
 
     <junction id="J0" type="traffic_light" x="0.00" y="0.00" incLanes="-north_0 -north_1 -east_0 -east_1 -east_2 -south_0 -south_1 -west_0 -west_1 -west_2" intLanes=":J0_0_0 :J0_1_0 :J0_2_0 :J0_3_0 :J0_4_0 :J0_4_1 :J0_6_0 :J0_7_0 :J0_8_0 :J0_9_0 :J0_10_0 :J0_11_0 :J0_11_1 :J0_13_0" shape="-6.40,13.60 3.20,13.60 4.00,11.38 5.00,10.60 6.40,10.04 8.20,9.71 10.40,9.60 10.40,-6.40 8.18,-7.20 7.40,-8.20 6.84,-9.60 6.51,-11.40 6.40,-13.60 -3.20,-13.60 -4.00,-11.38 -5.00,-10.60 -6.40,-10.04 -8.20,-9.71 -10.40,-9.60 -10.40,6.40 -8.18,7.20 -7.40,8.20 -6.84,9.60 -6.51,11.40" rightOfWay="allwayStop">
