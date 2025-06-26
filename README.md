@@ -1,15 +1,13 @@
-Image colorization transforms grayscale images into visually convincing color representa
-tions by leveraging reference color images to guide the colorization process. This report
- presents an implementation and analysis of exemplar-based deep learning networks for
- reference-guided image colorization. The exemplar-based approach reduces user effort by
- transferring colors from reference images that visually resemble grayscale targets through
- semantic correspondence matching and neural network-based color prediction. We imple
-ment a framework comprising semantic correspondence matching using pretrained VGG
-19 features and U-Net-based decoder architecture for color reconstruction. The system is
- evaluated on the Imagenette dataset using quantitative metrics including PSNR, SSIM,
- MSE, and LPIPS. Our experimental results demonstrate that the exemplar-based ap
-proach achieves superior performance with PSNR of 24.12 dB and SSIM of 0.9384, pro
-ducing high-quality colorizations when appropriate reference images are available. The
- method shows particular strength in maintaining object-level color consistency through
- semantic correspondence matching while effectively transferring colors from visually sim
-ilar reference images.
+ Traffic congestion at urban intersections leads to excessive delays, fuel consumption, and
+ emissions under static timing plans. We introduce a continuous-action policy-gradient
+ controller based on the REINFORCE algorithm, augmented with a learned value baseline
+ and entropy regularization to stabilize learning. The agent directly learns Gaussian
+parameterized green-light durations from a rich 60-dimensional state embedding that
+ captures per-lane queue lengths, vehicle speeds, waiting times, flow rates, and cyclic
+ phase encodings. To address multiple objectives—throughput maximization, wait-time
+ minimization, efficiency, and fairness—we design an adaptive, multi-term reward whose
+ weights respond dynamically to recent traffic trends. We validate our approach on a
+ realistic four-way SUMO intersection with heterogeneous traffic and benchmark against
+ a fixed-time controller. Results demonstrate 12.6% reduction in average waiting time and
+ 1.2% increase in throughput, showcasing the potential of variance-reduced, continuous
+control RL for adaptive urban signal timing.
